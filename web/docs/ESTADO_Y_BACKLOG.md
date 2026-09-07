@@ -133,7 +133,8 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 
 ### Importación y calidad del catálogo
 
-- [ ] Diseñar la sincronización repetible para el resto de la biblioteca.
+- [x] Diseñar la sincronización repetible para el resto de la biblioteca. Véase `docs/FASE_2_SINCRONIZACION.md`.
+- [ ] Implementar snapshot completo y reconciliación atómica para el resto de la biblioteca.
 - [ ] Detectar y presentar conflictos de orden, carpetas de recursos y archivos no compatibles.
 - [ ] Realizar inventario de códecs y tamaños antes de una importación masiva.
 - [ ] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.
