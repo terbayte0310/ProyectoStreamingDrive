@@ -104,6 +104,12 @@ La API no debe intentar simular una transacción con muchas llamadas independien
 - Hacer que catálogo y reproductor excluyan entidades cuyo `drive_item` no esté `available`, sin modificar `is_visible`.
 - Mantener las filas históricas para recuperar progreso y notas si el archivo reaparece.
 
+## Transición del piloto a la raíz completa
+
+No se debe crear otra `library_source` al cambiar la variable de `AWS` a `100_BIBLIOTECA_DE_CURSOS`. La transición debe conservar el `id` de la fuente piloto y actualizar únicamente su `drive_root_folder_id` y su nombre antes de publicar el primer snapshot completo.
+
+Esto permite que el ID de Drive de la carpeta `AWS`, que hoy representa la raíz/categoría piloto, pase a ser la categoría `AWS` de la biblioteca completa dentro de la misma fuente. Los cursos y lecciones ya importados conservan sus `drive_item_id`, personalizaciones, progreso y notas. Crear una fuente nueva duplicaría todo el catálogo AWS.
+
 ## Checkpoints
 
 ### 2A — snapshot puro y probado
@@ -118,7 +124,8 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 
 ### 2B — reconciliación transaccional
 
-- [ ] Crear migración y RPC atómica.
+- [x] Redactar migración y RPC atómica (`20260907230000_atomic_library_sync.sql`).
+- [ ] Aplicar la migración en Supabase y ejecutar pruebas transaccionales controladas.
 - [ ] Preservar campos manuales y datos privados.
 - [ ] Marcar ausentes y restaurados sin borrar entidades.
 - [ ] Probar dos ejecuciones idénticas y una ejecución con cambios.
@@ -151,4 +158,4 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 
 ## Siguiente acción exacta
 
-Implementar el checkpoint **2B** comenzando por la migración SQL. La función debe reconciliar un snapshot completo en una sola transacción, preservar campos manuales y marcar ausentes sin borrar entidades. No cambiar todavía la variable raíz ni ejecutar sobre el catálogo real.
+Revisar y aplicar `supabase/migrations/20260907230000_atomic_library_sync.sql` en Supabase. Después crear una ejecución y llamar la RPC con un snapshot pequeño/controlado dentro de una fuente de prueba o una transacción que se revierta. No cambiar todavía la variable raíz ni ejecutar sobre el catálogo real.
