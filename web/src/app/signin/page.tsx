@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -49,13 +50,13 @@ export default function SignInPage() {
         <div className="space-y-4">
           <p className="text-sm font-semibold tracking-[0.2em] text-sky-300 uppercase">Biblioteca personal</p>
           <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">Aprende desde tu biblioteca de cursos.</h1>
-          <p className="max-w-xl text-lg leading-8 text-slate-300">Esta pantalla valida el acceso con Google. El catálogo, progreso y notas se incorporarán en los siguientes hitos.</p>
+          <p className="max-w-xl text-lg leading-8 text-slate-300">Inicia sesión con una cuenta autorizada para acceder a tus cursos, progreso y notas privadas.</p>
         </div>
 
         {isLoading ? <p className="text-slate-300">Comprobando sesión…</p> : user ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-6">
             <div><p className="font-semibold text-emerald-200">Sesión iniciada</p><p className="mt-1 text-slate-200">{user.email}</p></div>
-            <button className="w-fit rounded-xl border border-slate-500 px-4 py-2 font-medium transition hover:bg-slate-800" onClick={() => void signOut()} type="button">Cerrar sesión</button>
+            <div className="flex flex-wrap gap-3"><Link className="w-fit rounded-xl bg-white px-4 py-2 font-semibold text-slate-950" href="/">Ir a mi biblioteca</Link><button className="w-fit rounded-xl border border-slate-500 px-4 py-2 font-medium transition hover:bg-slate-800" onClick={() => void signOut()} type="button">Cerrar sesión</button></div>
           </div>
         ) : <button className="w-fit rounded-xl bg-white px-5 py-3 font-semibold text-slate-950 transition hover:bg-sky-100" onClick={() => void signInWithGoogle()} type="button">Iniciar sesión con Google</button>}
 

@@ -32,7 +32,7 @@ Fuera del alcance inicial:
 | --- | --- |
 | Google Drive guarda los archivos; Supabase guarda el catálogo editable y el estado privado. | Evita duplicar cientos de GB de video y separa archivos de información de aprendizaje. |
 | Reproductor HTML5 nativo, no iframe `/preview` de Drive. | El iframe no expone tiempo actual, duración ni evento de finalización para construir progreso o notas. |
-| Service Worker para `/drive-stream/<id>`. | Añade temporalmente el token de Drive a las peticiones del `<video>` y conserva las peticiones `Range` necesarias para adelantar. |
+| Service Worker para `/drive-stream/<id>`. | Añade temporalmente el token de Drive a las peticiones del `<video>`, conserva `Range` y renueva el token tras una respuesta `401`. |
 | `drive.readonly` para la sesión de Drive. | `drive.metadata.readonly` permite leer el catálogo pero no el contenido de los videos. |
 | `lesson_progress` es la fuente única de verdad del progreso. | El catálogo calcula sus porcentajes a partir de esa tabla; no se mantiene un porcentaje duplicado en `courses`. |
 | Descarga mediante `webContentLink`, no reutilizando la respuesta de streaming. | Chrome rechazó la primera estrategia de convertir el stream en descarga dentro del Service Worker. |
@@ -73,7 +73,7 @@ Service Worker
   └── /drive-stream/<id> → Drive con Authorization + Range
 ```
 
-El Service Worker no guarda el token en la base de datos ni en `localStorage`. Solo lo conserva en memoria durante su vida útil.
+El Service Worker no guarda el token en la base de datos ni en `localStorage`. Solo conserva en memoria el token de acceso corto. El token de renovación permanece en una cookie `HttpOnly`, vinculado al usuario autenticado, y solo lo utiliza el servidor.
 
 ## Advertencias técnicas conocidas
 
@@ -85,7 +85,7 @@ Para uso normal basta `Ctrl + R`. El reproductor registra y espera la revisión 
 
 ### Token de Drive
 
-La sesión actual usa un token temporal. Debe implementarse una renovación controlada antes de considerar la aplicación lista para sesiones largas o muchos amigos.
+La renovación controlada está implementada y validada. La prueba de cierre colocó un token inválido solo en la memoria del Service Worker: Google respondió `401`, el Worker renovó mediante el servidor y el reintento devolvió `206 Partial Content`. También se revocó realmente el permiso en Google: el servidor devolvió `401`, limpió las cookies inválidas y la reautorización recuperó la reproducción. La configuración requiere `http://localhost:3000/**` en las redirecciones de Supabase; Google continúa usando el callback del proyecto Supabase.
 
 ### Formatos
 
@@ -125,9 +125,9 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 
 ### Administración del catálogo
 
-- [ ] Crear panel exclusivo para administrador.
-- [ ] Editar título, autor, plataforma, fecha, descripción y visibilidad de cursos.
-- [ ] Editar títulos y orden de secciones y lecciones sin modificar Drive.
+- [x] Crear panel exclusivo para administrador.
+- [x] Editar título, autor, plataforma, fecha, descripción, portada y visibilidad de cursos, sin modificar Drive.
+- [x] Editar títulos y orden de secciones y lecciones sin modificar Drive.
 - [ ] Añadir portadas manuales y preparar soporte para portadas generadas desde un frame.
 - [ ] Mostrar estado y resultado de cada sincronización de Drive.
 
@@ -140,7 +140,7 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 
 ### Robustez antes de ampliar usuarios
 
-- [ ] Renovar la autorización de Drive sin interrumpir un video largo.
+- [x] Renovar la autorización de Drive después de un `401` real de Google y reintentar el rango sin exponer el token largo.
 - [ ] Probar reproducción, avance y descarga con archivos grandes y más de un lector.
 - [ ] Mostrar errores comprensibles para token vencido, permiso retirado, archivo faltante y formato no compatible.
 - [ ] Añadir pruebas automatizadas para orden de lecciones, progreso y notas.

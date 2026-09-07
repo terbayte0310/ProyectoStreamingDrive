@@ -223,7 +223,7 @@ async function importCourseChildren({
       const { data: section, error } = await supabase
         .from("course_sections")
         .upsert(
-          { course_id: courseId, detected_title: child.name, drive_item_id: itemId, parent_section_id: parentSectionId, position },
+          { course_id: courseId, detected_position: position, detected_title: child.name, drive_item_id: itemId, parent_section_id: parentSectionId },
           { onConflict: "drive_item_id" },
         )
         .select("id")
@@ -241,7 +241,7 @@ async function importCourseChildren({
         detected_title: child.name,
         drive_item_id: itemId,
         media_type: child.mimeType.startsWith("audio/") ? "audio" : "video",
-        position,
+        detected_position: position,
         section_id: parentSectionId,
       },
       { onConflict: "drive_item_id" },

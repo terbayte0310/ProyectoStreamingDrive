@@ -34,6 +34,8 @@ type Progress = {
   updated_at: string;
 };
 
+type Profile = { is_authorized: boolean; role: "admin" | "reader" };
+
 function courseTitle(course: Course) {
   return course.custom_title ?? course.detected_title;
 }
@@ -66,9 +68,9 @@ export default async function CatalogPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_authorized")
+    .select("is_authorized, role")
     .eq("id", userData.user.id)
-    .maybeSingle<{ is_authorized: boolean }>();
+    .maybeSingle<Profile>();
   if (!profile?.is_authorized) redirect("/dashboard");
 
   const [categoriesResult, coursesResult, sectionsResult, lessonsResult, progressResult] =
@@ -219,9 +221,10 @@ export default async function CatalogPage() {
           {courses.length === 0 ? <p className="text-slate-300">Todavía no hay cursos importados.</p> : null}
         </div>
 
-        <a className="mt-10 inline-block text-sky-300 underline" href="/dashboard">
-          Volver al panel
-        </a>
+        <nav className="mt-10 flex flex-wrap gap-4 text-sky-300 underline">
+          <a href="/dashboard">Mi cuenta</a>
+          {profile.role === "admin" ? <a href="/admin">Administrar catálogo</a> : null}
+        </nav>
       </section>
     </main>
   );

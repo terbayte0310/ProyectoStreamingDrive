@@ -7,4 +7,4 @@
 
 Las dos variables `NEXT_PUBLIC_` son identificadores públicos del proyecto y pueden ser leídas por la aplicación web. No son contraseñas.
 
-Nunca incluyas en `.env.local` el archivo JSON de Google, el `client_secret`, una clave `secret` de Supabase, la contraseña de PostgreSQL ni un token de Google Drive. `.env.local` está ignorado por Git.
+Las credenciales OAuth de Drive sí se configuran mediante `GOOGLE_DRIVE_CLIENT_ID` y `GOOGLE_DRIVE_CLIENT_SECRET`, como muestra `.env.local.example`. Son variables privadas del servidor: no uses el prefijo `NEXT_PUBLIC_`, no las compartas y no confirmes `.env.local` en Git. Nunca guardes allí una clave secreta de Supabase, la contraseña de PostgreSQL ni un token obtenido de Google Drive.

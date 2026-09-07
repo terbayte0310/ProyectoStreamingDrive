@@ -26,6 +26,16 @@ http://localhost:3000/api/drive/pilot/callback
 
 Conserva también el retorno de Supabase que ya configuraste. Ambos son necesarios y son distintos: uno inicia sesión y el otro obtiene permiso temporal para leer Drive.
 
+Para la reproducción renovable, añade esta URL en Supabase → Authentication → URL Configuration → Redirect URLs:
+
+```text
+http://localhost:3000/**
+```
+
+El sufijo `**` permite los callbacks locales de autenticación y conservar el parámetro interno `returnTo`. `/auth/drive-callback` no necesita estar en los retornos autorizados de Google: Google vuelve primero al callback de Supabase (`https://<proyecto>.supabase.co/auth/v1/callback`) y Supabase redirige después a la aplicación.
+
+Las variables `GOOGLE_DRIVE_CLIENT_ID` y `GOOGLE_DRIVE_CLIENT_SECRET` deben coincidir con el mismo cliente Google configurado en Supabase. El flujo obtiene `provider_token` y `provider_refresh_token`; el token largo se conserva en una cookie `HttpOnly`, vinculada al usuario autenticado, y no se escribe en Supabase, `localStorage` ni JavaScript.
+
 ## 3. Ejecuta la prueba
 
 Con el servidor local activo, visita `http://localhost:3000/drive-pilot` y usa **Conectar y leer la carpeta raíz**. Elige la cuenta propietaria de la biblioteca cuando Google la solicite.

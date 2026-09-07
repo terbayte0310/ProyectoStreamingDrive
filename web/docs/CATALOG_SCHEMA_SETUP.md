@@ -20,4 +20,6 @@ La tabla `drive_items` permite ignorar `desktop.ini` sin eliminarlo de Drive. La
 3. Pulsa **Run**.
 4. Debes ver `Success. No rows returned`.
 
+Después aplica, en el mismo editor, `supabase/migrations/20260907160000_atomic_outline_reorder.sql`. Esta segunda migración separa el orden detectado en Drive del orden editorial y crea la operación transaccional que usa el panel de administración.
+
 No ejecutes todavía ningún `insert`: la primera sincronización creará la fuente de biblioteca y el contenido detectado.

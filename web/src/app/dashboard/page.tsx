@@ -107,9 +107,11 @@ export default function DashboardPage() {
                 Rol actual: {view.profile.role === "admin" ? "administrador" : "lector"}.
               </p>
             </div>
-            <p className="text-slate-300">
-              El catálogo se mostrará aquí después de completar la sincronización de Google Drive.
-            </p>
+            <p className="text-slate-300">Tu biblioteca está lista para usar.</p>
+            <div className="flex flex-wrap gap-3">
+              <a className="w-fit rounded-xl bg-white px-4 py-2 font-semibold text-slate-950" href="/catalog">Abrir catálogo</a>
+              {view.profile.role === "admin" ? <a className="w-fit rounded-xl border border-slate-500 px-4 py-2" href="/admin">Administrar catálogo</a> : null}
+            </div>
             <button className="w-fit rounded-xl border border-slate-500 px-4 py-2" onClick={() => void signOut()} type="button">
               Cerrar sesión
             </button>
