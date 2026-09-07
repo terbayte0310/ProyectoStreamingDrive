@@ -11,9 +11,12 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  if (!url.pathname.startsWith("/drive-stream/")) return;
+  const isStreamRequest = url.pathname.startsWith("/drive-stream/");
+  const isDownloadRequest = url.pathname.startsWith("/drive-download/");
+  if (!isStreamRequest && !isDownloadRequest) return;
 
-  const fileId = url.pathname.slice("/drive-stream/".length);
+  const pathPrefix = isStreamRequest ? "/drive-stream/" : "/drive-download/";
+  const fileId = url.pathname.slice(pathPrefix.length);
   if (!fileId || !driveAccessToken) {
     event.respondWith(new Response("Drive authorization is missing.", { status: 401 }));
     return;
@@ -21,6 +24,18 @@ self.addEventListener("fetch", (event) => {
 
   const headers = new Headers(event.request.headers);
   headers.set("Authorization", `Bearer ${driveAccessToken}`);
+
+  if (isDownloadRequest) {
+    headers.set("Accept", "application/json");
+    event.respondWith(
+      fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=webContentLink`,
+        { headers, method: "GET", mode: "cors" },
+      ),
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
       headers,
