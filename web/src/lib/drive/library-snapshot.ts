@@ -1,3 +1,5 @@
+import { normalizeDetectedTitle } from "./title-normalization.ts";
+
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const ignoredNames = new Set(["desktop.ini", ".ds_store", "thumbs.db"]);
 const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -8,6 +10,11 @@ export type DriveFile = {
   modifiedTime?: string;
   name: string;
   size?: string;
+  videoMediaMetadata?: {
+    durationMillis?: string;
+    height?: number;
+    width?: number;
+  };
 };
 
 type DriveListResponse = {
@@ -30,7 +37,9 @@ export type LibrarySnapshotItem = {
   categoryDriveFileId: string | null;
   courseDriveFileId: string | null;
   detectedPosition: number;
+  detectedTitle: string;
   driveFileId: string;
+  durationMillis: number | null;
   isFolder: boolean;
   kind: SnapshotKind;
   mimeType: string;
@@ -39,6 +48,8 @@ export type LibrarySnapshotItem = {
   parentDriveFileId: string | null;
   parentSectionDriveFileId: string | null;
   status: "available" | "ignored" | "unsupported";
+  videoHeight: number | null;
+  videoWidth: number | null;
 };
 
 export type LibrarySnapshot = {
@@ -91,7 +102,7 @@ export async function listDriveChildren(
 
   do {
     const query = new URLSearchParams({
-      fields: "nextPageToken,files(id,name,mimeType,modifiedTime,size)",
+      fields: "nextPageToken,files(id,name,mimeType,modifiedTime,size,videoMediaMetadata(durationMillis,width,height))",
       orderBy: "folder,name_natural",
       pageSize: "1000",
       q: `'${parentId}' in parents and trashed = false`,
@@ -128,13 +139,16 @@ function toSnapshotItem({
   parentSectionDriveFileId: string | null;
   position: number;
 }): LibrarySnapshotItem {
+  const isFolder = file.mimeType === FOLDER_MIME_TYPE;
   return {
     byteSize: file.size ? Number(file.size) : null,
     categoryDriveFileId,
     courseDriveFileId,
     detectedPosition: position,
+    detectedTitle: normalizeDetectedTitle(file.name, isFolder),
     driveFileId: file.id,
-    isFolder: file.mimeType === FOLDER_MIME_TYPE,
+    durationMillis: file.videoMediaMetadata?.durationMillis ? Number(file.videoMediaMetadata.durationMillis) : null,
+    isFolder,
     kind,
     mimeType: file.mimeType,
     modifiedAt: file.modifiedTime ?? null,
@@ -142,6 +156,8 @@ function toSnapshotItem({
     parentDriveFileId,
     parentSectionDriveFileId,
     status: kind === "ignored" ? "ignored" : kind === "unsupported" || kind === "conflict" ? "unsupported" : "available",
+    videoHeight: file.videoMediaMetadata?.height ?? null,
+    videoWidth: file.videoMediaMetadata?.width ?? null,
   };
 }
 
@@ -291,25 +307,24 @@ export async function scanDriveLibrary({
   };
 }
 
-export function listLibrarySnapshotIssues(snapshot: LibrarySnapshot): LibrarySnapshotIssue[] {
-  const itemsById = new Map(snapshot.items.map((item) => [item.driveFileId, item]));
+export function buildSnapshotItemPath(snapshot: LibrarySnapshot, item: LibrarySnapshotItem): string {
+  const itemsById = new Map(snapshot.items.map((entry) => [entry.driveFileId, entry]));
+  const names: string[] = [];
+  const visited = new Set<string>();
+  let current: LibrarySnapshotItem | undefined = item;
 
-  function buildPath(item: LibrarySnapshotItem) {
-    const names: string[] = [];
-    const visited = new Set<string>();
-    let current: LibrarySnapshotItem | undefined = item;
-
-    while (current && !visited.has(current.driveFileId)) {
-      visited.add(current.driveFileId);
-      names.push(current.name);
-      current = current.parentDriveFileId
-        ? itemsById.get(current.parentDriveFileId)
-        : undefined;
-    }
-
-    return names.reverse().join(" / ");
+  while (current && !visited.has(current.driveFileId)) {
+    visited.add(current.driveFileId);
+    names.push(current.name);
+    current = current.parentDriveFileId
+      ? itemsById.get(current.parentDriveFileId)
+      : undefined;
   }
 
+  return names.reverse().join(" / ");
+}
+
+export function listLibrarySnapshotIssues(snapshot: LibrarySnapshot): LibrarySnapshotIssue[] {
   return snapshot.items
     .filter((item): item is LibrarySnapshotItem & { kind: LibrarySnapshotIssue["kind"] } => (
       item.kind === "conflict" || item.kind === "ignored" || item.kind === "unsupported"
@@ -320,6 +335,6 @@ export function listLibrarySnapshotIssues(snapshot: LibrarySnapshot): LibrarySna
       kind: item.kind,
       mimeType: item.mimeType,
       name: item.name,
-      path: buildPath(item),
+      path: buildSnapshotItemPath(snapshot, item),
     }));
 }

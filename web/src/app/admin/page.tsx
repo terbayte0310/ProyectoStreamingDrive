@@ -5,6 +5,7 @@ import {
   type AdminSection,
 } from "@/components/admin-course-manager";
 import { CatalogSyncPanel } from "@/components/catalog-sync-panel";
+import { CodecInventoryPanel } from "@/components/codec-inventory-panel";
 import { requireAdminAccess } from "@/lib/auth/access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -48,6 +49,7 @@ export default async function AdminPage() {
         ) : (
           <>
             <CatalogSyncPanel />
+            <CodecInventoryPanel />
             <AdminCourseManager
               courses={courses}
               key={catalogRevision}

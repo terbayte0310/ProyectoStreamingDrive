@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentAccess } from "@/lib/auth/access";
+import { buildCodecInventory } from "@/lib/drive/codec-inventory";
+import { probeReviewCandidates } from "@/lib/drive/codec-probe";
 import { getDriveConfig } from "@/lib/drive/config";
 import {
   listDriveChildren,
@@ -20,7 +22,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type SyncMode = "preview" | "publish";
+type SyncMode = "codec-inventory" | "preview" | "publish";
 type Source = { drive_root_folder_id: string; id: string; name: string };
 
 function fingerprintSnapshot(rootFolderId: string, items: unknown[]) {
@@ -44,14 +46,15 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  let body: { confirmRootChange?: unknown; mode?: unknown; previewFingerprint?: unknown };
+  let body: { confirmRootChange?: unknown; mode?: unknown; previewFingerprint?: unknown; probeCodecs?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "La solicitud de sincronización no es válida." }, { status: 400 });
   }
-  const mode: SyncMode | null = body.mode === "preview" || body.mode === "publish" ? body.mode : null;
-  if (!mode) return NextResponse.json({ error: "El modo debe ser preview o publish." }, { status: 400 });
+  const mode: SyncMode | null =
+    body.mode === "preview" || body.mode === "publish" || body.mode === "codec-inventory" ? body.mode : null;
+  if (!mode) return NextResponse.json({ error: "El modo debe ser preview, publish o codec-inventory." }, { status: 400 });
 
   let token: Awaited<ReturnType<typeof refreshDriveAccessToken>>;
   try {
@@ -74,6 +77,14 @@ export async function POST(request: NextRequest) {
       listChildren: (parentId) => listDriveChildren(token.access_token!, parentId),
       rootFolderId: config.rootFolderId,
     });
+    if (mode === "codec-inventory") {
+      const inventory = buildCodecInventory(snapshot);
+      const probe = body.probeCodecs === true
+        ? await probeReviewCandidates(token.access_token!, inventory.reviewCandidates)
+        : null;
+      return respond({ inventory, mode, probe });
+    }
+
     const previewFingerprint = fingerprintSnapshot(config.rootFolderId, snapshot.items);
     const supabase = await createSupabaseServerClient();
     const { data: sources, error: sourceError } = await supabase
