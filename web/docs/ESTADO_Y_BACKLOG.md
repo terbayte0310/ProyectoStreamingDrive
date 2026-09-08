@@ -1,7 +1,7 @@
 # Estado y backlog — Biblioteca personal de cursos
 
 **Última actualización:** 7 de septiembre de 2026  
-**Estado:** MVP funcional; sincronización integral implementada y validada hasta la previsualización segura de la raíz piloto.
+**Estado:** MVP funcional; biblioteca completa previsualizada sin conflictos y pendiente de primera publicación autorizada.
 **Repositorio:** Git local en `ProyectoStreamingDrive`; todavía no hay remoto configurado.
 
 ## Propósito del proyecto
@@ -142,6 +142,7 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 - [x] Diseñar la sincronización repetible para el resto de la biblioteca. Véase `docs/FASE_2_SINCRONIZACION.md`.
 - [x] Implementar snapshot completo y reconciliación atómica para el resto de la biblioteca.
 - [x] Detectar y presentar en la previsualización conflictos estructurales, ignorados y archivos no compatibles.
+- [x] Previsualizar `100_BIBLIOTECA_DE_CURSOS`: 2 categorías, 4 cursos, 23 secciones y 144 lecciones; ningún video descartado.
 - [ ] Validar y publicar el primer snapshot de `100_BIBLIOTECA_DE_CURSOS`.
 - [ ] Realizar inventario de códecs y tamaños antes de una importación masiva.
 - [ ] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.

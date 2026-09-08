@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { type DriveFile, listDriveChildren, scanDriveLibrary } from "../src/lib/drive/library-snapshot.ts";
+import {
+  type DriveFile,
+  listDriveChildren,
+  listLibrarySnapshotIssues,
+  scanDriveLibrary,
+} from "../src/lib/drive/library-snapshot.ts";
 
 const folder = (id: string, name: string): DriveFile => ({
   id,
@@ -61,6 +66,12 @@ test("classifies ignored, unsupported and structurally conflicting files", async
   assert.equal(snapshot.counters.conflicts, 2);
   assert.equal(snapshot.counters.unsupported, 1);
   assert.equal(snapshot.counters.ignored, 2);
+
+  const issues = new Map(listLibrarySnapshotIssues(snapshot).map((issue) => [issue.name, issue]));
+  assert.equal(issues.size, 5);
+  assert.equal(issues.get("suelto.mp4")?.path, "100_BIBLIOTECA_DE_CURSOS / suelto.mp4");
+  assert.equal(issues.get("portada.jpg")?.path, "100_BIBLIOTECA_DE_CURSOS / AWS / portada.jpg");
+  assert.equal(issues.get("guia.pdf")?.path, "100_BIBLIOTECA_DE_CURSOS / AWS / Lambda / guia.pdf");
 });
 
 test("loads every Drive page and returns natural order", async () => {
@@ -91,4 +102,3 @@ test("rejects a repeated folder instead of scanning an ambiguous cycle", async (
     /repetida o cíclica/,
   );
 });
-

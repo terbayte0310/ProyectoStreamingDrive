@@ -57,6 +57,14 @@ export type LibrarySnapshot = {
   rootFolderId: string;
 };
 
+export type LibrarySnapshotIssue = {
+  driveFileId: string;
+  kind: "conflict" | "ignored" | "unsupported";
+  mimeType: string;
+  name: string;
+  path: string;
+};
+
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 type ListChildren = (parentId: string) => Promise<DriveFile[]>;
 
@@ -246,3 +254,34 @@ export async function scanDriveLibrary({
   };
 }
 
+export function listLibrarySnapshotIssues(snapshot: LibrarySnapshot): LibrarySnapshotIssue[] {
+  const itemsById = new Map(snapshot.items.map((item) => [item.driveFileId, item]));
+
+  function buildPath(item: LibrarySnapshotItem) {
+    const names: string[] = [];
+    const visited = new Set<string>();
+    let current: LibrarySnapshotItem | undefined = item;
+
+    while (current && !visited.has(current.driveFileId)) {
+      visited.add(current.driveFileId);
+      names.push(current.name);
+      current = current.parentDriveFileId
+        ? itemsById.get(current.parentDriveFileId)
+        : undefined;
+    }
+
+    return names.reverse().join(" / ");
+  }
+
+  return snapshot.items
+    .filter((item): item is LibrarySnapshotItem & { kind: LibrarySnapshotIssue["kind"] } => (
+      item.kind === "conflict" || item.kind === "ignored" || item.kind === "unsupported"
+    ))
+    .map((item) => ({
+      driveFileId: item.driveFileId,
+      kind: item.kind,
+      mimeType: item.mimeType,
+      name: item.name,
+      path: buildPath(item),
+    }));
+}

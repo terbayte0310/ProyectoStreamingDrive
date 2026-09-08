@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentAccess } from "@/lib/auth/access";
 import { getDriveConfig } from "@/lib/drive/config";
-import { listDriveChildren, scanDriveLibrary } from "@/lib/drive/library-snapshot";
+import {
+  listDriveChildren,
+  listLibrarySnapshotIssues,
+  scanDriveLibrary,
+} from "@/lib/drive/library-snapshot";
 import {
   clearDriveSessionCookies,
   DRIVE_REFRESH_COOKIE,
@@ -94,6 +98,7 @@ export async function POST(request: NextRequest) {
     if (mode === "preview") {
       return respond({
         mode,
+        issues: listLibrarySnapshotIssues(snapshot),
         pilotRootConfigured,
         rootChangeRequired,
         sourceExists: Boolean(existingSource),

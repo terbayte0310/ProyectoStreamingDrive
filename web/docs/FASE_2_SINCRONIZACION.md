@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** checkpoints 2A, 2B y la previsualización segura de 2C validados; falta apuntar a la raíz completa y publicar.
+**Estado:** checkpoints 2A, 2B y 2C validados; raíz completa previsualizada y pendiente de primera publicación autorizada.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -161,10 +161,20 @@ Estos conteos **no representan todavía la jerarquía final**: al usar AWS como 
 
 La interfaz solo conserva el bloqueo mientras la raíz configurada siga siendo la misma raíz piloto. Cuando `.env.local` apunte a la biblioteca completa, mostrará la confirmación de transición. La publicación queda vinculada criptográficamente a la última previsualización; un cambio intermedio en Drive obliga a revisar los contadores otra vez.
 
+#### Validación real con la raíz completa
+
+Después de cambiar `GOOGLE_DRIVE_ROOT_FOLDER_ID`, la previsualización real del 7 de septiembre de 2026 devolvió:
+
+- 2 categorías, 4 cursos, 23 secciones y 144 lecciones reproducibles.
+- 0 conflictos estructurales, 70 elementos no compatibles y 1 ignorado.
+- Transición de la fuente piloto detectada correctamente; el botón de publicación existe, pero permanece deshabilitado hasta la confirmación explícita.
+
+Se añadió al panel un informe desplegable con nombre, ruta completa y MIME de cada elemento señalado. La revisión de los 70 no compatibles encontró 59 subtítulos `.srt`, 1 RAR, 1 imagen WebP, 1 PDF, 3 accesos `.url` y 5 textos; **no hay videos descartados por formato**. Estos materiales no entran en la cola de reproducción. Algunas carpetas que solo agrupan recursos o subtítulos sí cuentan hoy como secciones administrativas; es una mejora de presentación posterior, no un riesgo para la publicación atómica ni para las lecciones.
+
 ### 2D — validación real y retiro del piloto
 
-- [ ] Cambiar `GOOGLE_DRIVE_ROOT_FOLDER_ID` de `AWS` a `100_BIBLIOTECA_DE_CURSOS`.
-- [ ] Ejecutar primero un escaneo/previsualización sin publicar.
+- [x] Cambiar `GOOGLE_DRIVE_ROOT_FOLDER_ID` de `AWS` a `100_BIBLIOTECA_DE_CURSOS`.
+- [x] Ejecutar primero un escaneo/previsualización sin publicar.
 - [ ] Publicar la sincronización completa y revisar conflictos.
 - [ ] Repetir sin cambios y comprobar idempotencia.
 - [ ] Renombrar/mover/agregar un elemento de prueba en Drive y comprobar reconciliación.
@@ -183,4 +193,4 @@ La interfaz solo conserva el bloqueo mientras la raíz configurada siga siendo l
 
 ## Siguiente acción exacta
 
-Obtener el ID de `100_BIBLIOTECA_DE_CURSOS`, cambiar únicamente `GOOGLE_DRIVE_ROOT_FOLDER_ID` en `.env.local`, reiniciar Next.js y ejecutar una nueva previsualización desde `/admin`. No publicar hasta revisar sus contadores, archivos no compatibles y conflictos.
+Con autorización del propietario, marcar la confirmación y publicar el snapshot ya revisado desde `/admin`. Después comprobar catálogo, reproducción del curso AWS y uno de Adobe; finalmente repetir la previsualización/publicación sin cambios para validar la idempotencia real.

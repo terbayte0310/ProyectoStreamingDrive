@@ -21,6 +21,13 @@ type SyncSummary = {
 
 type SyncResult = {
   error?: string;
+  issues?: Array<{
+    driveFileId: string;
+    kind: "conflict" | "ignored" | "unsupported";
+    mimeType: string;
+    name: string;
+    path: string;
+  }>;
   mode?: "preview" | "publish";
   pilotRootConfigured?: boolean;
   previewFingerprint?: string;
@@ -37,6 +44,12 @@ const labels: Array<[keyof SyncSummary, string]> = [
   ["unsupported", "No compatibles"],
   ["conflicts", "Conflictos"],
   ["ignored", "Ignorados"],
+];
+
+const issueGroups = [
+  { kind: "conflict" as const, label: "Conflictos estructurales" },
+  { kind: "unsupported" as const, label: "Archivos no compatibles" },
+  { kind: "ignored" as const, label: "Archivos ignorados" },
 ];
 
 export function CatalogSyncPanel() {
@@ -106,6 +119,31 @@ export function CatalogSyncPanel() {
             ))}
           </div>
 
+          {result.issues?.length ? (
+            <div className="mt-4 space-y-2">
+              {issueGroups.map(({ kind, label }) => {
+                const issues = result.issues?.filter((issue) => issue.kind === kind) ?? [];
+                if (!issues.length) return null;
+                return (
+                  <details className="rounded-xl border border-slate-700 bg-slate-950" key={kind} open={kind === "conflict"}>
+                    <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-200">
+                      {label} ({issues.length})
+                    </summary>
+                    <ul className="max-h-96 space-y-2 overflow-y-auto border-t border-slate-800 p-3">
+                      {issues.map((issue) => (
+                        <li className="rounded-lg bg-slate-900 p-3" key={issue.driveFileId}>
+                          <p className="text-sm font-medium text-slate-100">{issue.name}</p>
+                          <p className="mt-1 break-all text-xs text-slate-400">{issue.path}</p>
+                          <p className="mt-1 break-all text-xs text-slate-500">{issue.mimeType}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                );
+              })}
+            </div>
+          ) : null}
+
           {publishingBlocked ? (
             <p className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">
               Publicación bloqueada: la variable local todavía apunta a la carpeta piloto AWS. Configura primero la raíz 100_BIBLIOTECA_DE_CURSOS.
@@ -117,7 +155,7 @@ export function CatalogSyncPanel() {
               ) : null}
               <label className="flex items-start gap-2 text-sm text-slate-300">
                 <input checked={confirmed} className="mt-1" onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
-                Revisé los contadores y autorizo publicar este snapshot en el catálogo.
+                Revisé los contadores y los archivos señalados; autorizo publicar este snapshot en el catálogo.
               </label>
               <button
                 className="w-fit rounded-xl bg-white px-4 py-2 font-semibold text-slate-950 disabled:opacity-40"
