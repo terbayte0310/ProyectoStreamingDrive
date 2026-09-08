@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** checkpoint 2A validado; migración 2B aplicada en Supabase y pendiente de prueba transaccional.
+**Estado:** checkpoints 2A y 2B validados; 2C en implementación.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -133,16 +133,20 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 
 - [x] Redactar migración y RPC atómica (`20260907230000_atomic_library_sync.sql`).
 - [x] Aplicar la migración en Supabase (`Success. No rows returned`).
-- [ ] Ejecutar pruebas transaccionales controladas.
-- [ ] Preservar campos manuales y datos privados.
-- [ ] Marcar ausentes y restaurados sin borrar entidades.
-- [ ] Probar dos ejecuciones idénticas y una ejecución con cambios.
+- [x] Ejecutar pruebas transaccionales controladas (`Success. No rows returned`).
+- [x] Preservar campos manuales y datos privados.
+- [x] Marcar ausentes y restaurados sin borrar entidades.
+- [x] Probar dos ejecuciones idénticas y una ejecución con cambios.
 
 ### 2C — operación administrativa
 
-- [ ] Crear endpoint exclusivo para administrador usando la sesión renovable de Drive.
+- [x] Crear endpoint exclusivo para administrador usando la sesión renovable de Drive.
 - [ ] Añadir acción de sincronización y mostrar ejecución, estado y contadores.
-- [ ] Impedir ejecuciones concurrentes.
+- [x] Impedir ejecuciones concurrentes mediante índice único y respuesta `409`.
+
+El endpoint es `POST /api/drive-token/sync` y acepta `{ "mode": "preview" }` o `{ "mode": "publish" }`. Está bajo `/api/drive-token` para recibir las cookies de Drive sin ampliar su alcance. Siempre obtiene un token nuevo antes del recorrido. `preview` no escribe catálogo; `publish` exige `confirmRootChange: true` cuando la raíz configurada difiere de la fuente existente.
+
+La publicación usa la sobrecarga RPC de `20260907234000_atomic_source_root_transition.sql`: reconciliación y transición de raíz pertenecen a la misma transacción.
 
 ### 2D — validación real y retiro del piloto
 
@@ -166,4 +170,4 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 
 ## Siguiente acción exacta
 
-Ejecutar `supabase/tests/atomic_library_sync_test.sql` en Supabase. La prueba debe terminar correctamente y revertir sus datos. No cambiar todavía la variable raíz ni ejecutar sobre el catálogo real.
+Aplicar `supabase/migrations/20260907234000_atomic_source_root_transition.sql`, ejecutar pruebas/lint/build y después construir el panel administrativo de previsualización. No cambiar todavía la variable raíz ni publicar sobre el catálogo real.
