@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** biblioteca completa publicada, reproducible e idempotente; secciones auxiliares normalizadas y publicadas. Falta validar un cambio controlado en Drive y retirar rutas piloto.
+**Estado:** biblioteca completa publicada, reproducible e idempotente; secciones auxiliares y títulos normalizados; inventario de códecs y tamaños disponible en el panel admin. Falta retirar rutas piloto.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -229,6 +229,56 @@ La carpeta se restauró manualmente a `Subtitles`. La segunda previsualización 
 
 Con los dos sentidos publicados, se validó que un renombrado reversible de Drive actualiza y restaura el inventario por identidad estable, sin duplicar entidades ni modificar el orden manual, progreso, notas o la cola de reproducción.
 
+### 2F — normalización de títulos y códecs/tamaños
+
+- [x] Separar `detected_name` (nombre crudo de Drive, para identidad/auditoría) de `detected_title` (título normalizado mostrado en catálogo).
+- [x] Añadir `normalizeDetectedTitle` (`src/lib/drive/title-normalization.ts`): quita extensión, quita un prefijo numérico inequívoco (`01 - `, `001.`), convierte `_`/`-` a espacio solo cuando unen palabras (no cuando ya se usan como separador visual, p. ej. `"Módulo 1 - Fundamentos"` permanece igual), y nunca toca mayúsculas ni siglas.
+- [x] Migrar `reconcile_library_snapshot` (`20260908020000_normalize_detected_titles.sql`) para que `categories`, `courses`, `course_sections` y `lessons` usen `detected_title` normalizado; `drive_items.detected_name` sigue siendo el nombre real de Drive.
+- [x] Ampliar `listDriveChildren` con `videoMediaMetadata(durationMillis,width,height)` y añadir `buildCodecInventory` (`src/lib/drive/codec-inventory.ts`): agrupa lecciones por contenedor y separa `safeContainers` (MP4/AAC ya validados) de `reviewContainers`.
+- [x] Añadir sondeo real opcional con `ffprobe` (`src/lib/drive/codec-probe.ts`), acotado a los contenedores de `reviewContainers` (nunca a toda la biblioteca), con degradación explícita si `ffprobe` no está instalado localmente.
+- [x] Exponer todo en el panel admin: nuevo modo `codec-inventory` en `POST /api/drive-token/sync` (solo lectura, no toca `library_sources` ni `catalog_sync_runs`) y el componente `CodecInventoryPanel`.
+- [ ] Publicar de nuevo la biblioteca real (tras aplicar la migración `20260908020000` en Supabase) y confirmar visualmente que los títulos ya no muestran prefijos numéricos ni guiones bajos, y que un curso con `custom_title` ya definido no cambia.
+- [x] Ejecutar "Sondear códecs a revisar" contra la biblioteca real con `ffprobe` instalado.
+
+#### Validación real del sondeo de códecs
+
+El 8 de septiembre de 2026 se ejecutó "Sondear códecs a revisar" contra la biblioteca real. `buildCodecInventory` separó correctamente 96 lecciones `video/mp4` (5.82 GB, contenedor seguro) de 48 lecciones `video/mp2t` (2.97 GB) pertenecientes a `DaVinci_Resolve_20_Masterclass...`. `ffprobe` confirmó, en los 25 archivos sondeados (límite por ejecución), video H.264 y audio AAC reales — el códec ya es compatible, pero el contenedor `.ts` no es la ruta segura documentada para `<video>` en navegador.
+
+**Confirmado en el navegador real:** una lección `.ts` de ese curso se quedó bloqueada al reproducir desde `/catalog` (no avanza más allá de `0:00`). Esto confirma que el contenedor `.ts`, aunque el códec interno sea H.264/AAC, no es viable tal cual para el reproductor HTML5 actual y sí requiere remux a `.mp4` (`ffmpeg -c copy`, sin recodificar) antes de que esas 48 lecciones sean reproducibles.
+
+La primera ejecución descargaba el archivo completo antes de analizarlo y tardó más de 2 minutos para 25 archivos de ~9 GB en conjunto, un ritmo que no escala a los ~700 GB pendientes en `D:\Cursos`. Se corrigió `probeReviewCandidates` para descargar solo un prefijo de 16 MB por archivo (con `Range`, igual que ya usa el reproductor) en vez del archivo completo; es suficiente para que `ffprobe` identifique el códec real en contenedores como `.ts`/`.mkv`/`.avi`. Límite conocido: un `.mov`/`.mp4` sin `faststart` con el índice al final podría fallar el sondeo con un prefijo truncado; en ese caso queda como `probeError` por archivo, sin romper el resto del panel.
+
+#### Auditoría local completa de `D:\Cursos` (antes de la importación masiva)
+
+El 8 de septiembre de 2026 se auditó todo `D:\Cursos` (20,839 archivos, 776.8 GB, coincide con la auditoría original de `docs/planificacion/08-preparacion-de-biblioteca-para-drive.md`) por extensión y, para los contenedores de riesgo, por códec real (`ffprobe`) y por firma de archivo (byte mágico `0x47` para distinguir `.ts` de video real de `.ts` de código fuente TypeScript). Resultado:
+
+| Extensión | Archivos | Tamaño | Diagnóstico |
+| --- | --- | --- | --- |
+| `.mp4` | 10,672 | 716.73 GB | Ya seguro |
+| `.mp3` | 1,814 | 20.85 GB | Ya seguro |
+| `.ts` (video real) | 227 | ~25 GB | H.264/AAC confirmado, solo falta remux — 10 cursos afectados (el mayor: `PC/Curso robótica`, 70 archivos) |
+| `.avi` | 13 | 7.78 GB | Códec real `mpeg4`+`mp3` (no H.264), necesita recodificar de verdad — todos en `Idiomas/Inglés` |
+| `.ts` (código fuente, no video) | 7 | ~0 GB | Recurso de programación del curso de Astro; riesgo de que Drive lo etiquete como `video/mp2t` por extensión y aparezca como lección falsa |
+| `.mkv` | 0 | — | No existe ninguno en `D:\Cursos` |
+| Basura de macOS / ayuda embebida | 9 | ~0 GB | Ya ignorados por prefijo `.` o irrelevantes (`hilfe.flv` de un instalador de Excel) |
+
+Solo ~4.3% del contenido (33 GB de 776.8 GB) necesita alguna conversión antes de subir el resto de la biblioteca. Reporte completo por archivo (ruta, tamaño, tipo, códec) entregado como CSV al usuario; no versionado en el repo por ser una auditoría de una ruta local (`D:\Cursos`) específica de esta máquina.
+
+**Pendiente de decidir/ejecutar:** el script de remux (`.ts`→`.mp4`, `-c copy`) y el de recodificación (`.avi`→`.mp4`, `mpeg4`→`h264`) todavía no se generaron ni corrieron — quedó pausado a la espera de decisión del usuario.
+
+#### Fuera de esta fase: auditoría de películas (`E:\Entretenimiento\...\PELICULAS`, `G:\PELIS\HP`)
+
+`docs/planificacion/00-vision-del-producto.md` ya contempla que la misma arquitectura sirva películas/series; hoy no existe todavía ninguna `library_source` para ese contenido. Como preparación temprana se auditaron 50 archivos (112.79 GB) con `ffprobe` completo (video + **todas** las pistas de audio + subtítulos, no solo la primera):
+
+| Grupo | Archivos | Tamaño | Diagnóstico |
+| --- | --- | --- | --- |
+| Solo remux (H.264 + ya trae una pista AAC) | 28 | 16.96 GB | Todos los "Pokémon Generations"/"Origins" y 6 de 8 películas de Harry Potter |
+| Video OK, audio no (H.264 + solo AC3/EAC3, sin AAC) | 21 | 94.98 GB | Las 20 películas grandes de Pokémon + Harry Potter 6 — solo hay que recodificar el audio (`-c:v copy -c:a aac`), el video se copia tal cual |
+| Video incompatible de verdad | 1 | 0.85 GB | `Pelicula_01_Mew_Vs_Mewtwo...avi`, códec `mpeg4` |
+| Sin escanear (comprimido) | 1 | 1.63 GB | `HP1 [2001].rar`, pendiente de extraer |
+
+**Decisión de arquitectura tomada (no implementada todavía):** no usar el truco `<source src="x.mkv" type="video/mp4">` (no confiable entre navegadores, mismo tipo de falla que ya se confirmó con `.ts`) ni transcodificación en servidor al vuelo (como hace Google Drive o Plex Web) por ahora, para no añadir infraestructura de cómputo permanente. En su lugar: multi-idioma de audio se resuelve generando **un `.mp4` por idioma** (mismo video copiado sin recodificar, solo la pista de audio correspondiente transcodificada a AAC) con un selector en los controles propios del reproductor (punto 4 del backlog); multi-subtítulo se resuelve extrayendo cada pista a `.vtt` (WebVTT) y usando `<track>` nativo, uno por idioma. Ambas extracciones pueden hacerse en la misma pasada de `ffmpeg` que ya hace falta para arreglar el audio AC3. Esto es trabajo del punto 4 (experiencia de reproductor), todavía no iniciado.
+
 ## Archivos principales
 
 - `src/lib/drive/catalog-importer.ts`: importador piloto que se reemplazará gradualmente.
@@ -238,8 +288,16 @@ Con los dos sentidos publicados, se validó que un renombrado reversible de Driv
 - `src/app/api/drive/diagnostic-import/callback/route.ts`: entrada temporal del importador piloto.
 - `supabase/migrations/20260906230000_catalog_foundation.sql`: esquema base.
 - `supabase/migrations/20260907160000_atomic_outline_reorder.sql`: separación de orden detectado/manual.
+- `src/lib/drive/title-normalization.ts`: regla pura de normalización de `detected_title` (2F).
+- `src/lib/drive/codec-inventory.ts`: agrupación de lecciones por contenedor seguro/a revisar (2F).
+- `src/lib/drive/codec-probe.ts`: sondeo real con `ffprobe`, acotado a los contenedores a revisar (2F).
+- `supabase/migrations/20260908020000_normalize_detected_titles.sql`: `detected_title` normalizado sin tocar `detected_name` (2F).
 - `docs/ESTADO_Y_BACKLOG.md`: estado general del producto.
 
 ## Siguiente acción exacta
 
-Consolidar o retirar las rutas experimentales del importador piloto AWS (`/api/drive/diagnostic-import` y las rutas de diagnóstico que ya no aporten soporte operativo), sin tocar la ruta estable `/api/drive-token/sync`. Después, empezar la siguiente capa del producto: experiencia de curso y reproductor con árbol expandible y progreso por sección.
+1. Confirmar que la migración `20260908020000_normalize_detected_titles.sql` ya se aplicó en Supabase y volver a publicar para verificar títulos normalizados en producción (único punto abierto de 2F).
+2. Decidir y, si se aprueba, generar los scripts de conversión pendientes: remux `.ts`→`.mp4` y recodificación `.avi`→`.mp4` para `D:\Cursos` (233 archivos, ~33 GB); remux/recodificación de audio para las películas de `E:\Entretenimiento\...\PELICULAS` y `G:\PELIS\HP` (50 archivos, 112.79 GB) con extracción de audio multi-idioma y subtítulos `.vtt` en la misma pasada.
+3. Consolidar o retirar las rutas experimentales del importador piloto AWS (`/api/drive/diagnostic-import` y las rutas de diagnóstico que ya no aporten soporte operativo), sin tocar la ruta estable `/api/drive-token/sync`.
+4. Empezar la siguiente capa del producto: experiencia de curso y reproductor con árbol expandible, progreso por sección, pantalla final y controles propios — incluyendo el selector de idioma de audio y de subtítulos que ya se decidió arquitectónicamente arriba.
+5. Añadir pruebas automáticas de progreso, notas y orden completo.

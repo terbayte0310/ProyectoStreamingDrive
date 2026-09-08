@@ -1,7 +1,7 @@
 # Estado y backlog — Biblioteca personal de cursos
 
 **Última actualización:** 8 de septiembre de 2026
-**Estado:** MVP funcional; biblioteca completa publicada, reproducible e idempotente. La limpieza semántica de secciones auxiliares ya está publicada.
+**Estado:** MVP funcional; biblioteca completa publicada, reproducible e idempotente. Secciones auxiliares y títulos normalizados; inventario de códecs y tamaños disponible en `/admin`. Pendiente: retirar rutas piloto AWS y decidir cuándo convertir el video no compatible detectado (ver `docs/FASE_2_SINCRONIZACION.md`).
 **Repositorio:** Git local en `ProyectoStreamingDrive`; todavía no hay remoto configurado.
 
 ## Propósito del proyecto
@@ -128,6 +128,7 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 
 - [ ] Diseñar una vista de curso con secciones expandibles, lección actual y progreso por sección.
 - [ ] Reemplazar gradualmente los controles nativos por controles visuales propios: reproducción, volumen, velocidad, pantalla completa, siguiente lección y loader.
+- [ ] Selector de idioma de audio (cambia `src` entre archivos `.mp4` por idioma, conserva `currentTime`) y selector de subtítulos (`<track>` por idioma) — decisión de arquitectura registrada en `docs/FASE_2_SINCRONIZACION.md` 2F, pensada para el contenido de películas.
 - [ ] Mantener los eventos nativos del `<video>` aunque cambie la interfaz.
 - [ ] Definir experiencia al terminar el último video de un curso.
 
@@ -150,8 +151,18 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 - [x] Repetir la publicación sin cambios y comprobar que no aparecen duplicados.
 - [x] Aplicar y publicar la regla de secciones semánticas: una carpeta solo es módulo si contiene alguna lección reproducible descendiente.
 - [x] Validar un renombrado reversible en Drive y su restauración sin duplicados ni pérdida de datos privados.
-- [ ] Realizar inventario de códecs y tamaños antes de una importación masiva.
-- [ ] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.
+- [x] Realizar inventario de códecs y tamaños antes de una importación masiva.
+- [x] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.
+
+### Conversión previa a importación masiva (hallazgos del 8 de septiembre de 2026)
+
+Auditoría completa por códec real (no solo extensión); detalle y CSV por archivo en `docs/FASE_2_SINCRONIZACION.md`, sección 2F.
+
+- [ ] `D:\Cursos`: remuxear 227 lecciones `.ts` (H.264/AAC confirmado, solo falta contenedor) a `.mp4` con `ffmpeg -c copy`.
+- [ ] `D:\Cursos`: recodificar 13 `.avi` de `Idiomas/Inglés` (códec real `mpeg4`+`mp3`) a H.264/AAC.
+- [ ] `D:\Cursos`: confirmar que los 7 archivos `.ts` de código fuente (curso de Astro) no se suban con extensión `.ts`, o revisar tras publicar que Drive no los haya clasificado como lección de video.
+- [ ] Películas (`E:\Entretenimiento\...\PELICULAS`, `G:\PELIS\HP`, 50 archivos/112.79 GB, fuera del alcance de Fase 2 — todavía no tienen `library_source`): remux de 28 archivos ya compatibles, recodificar solo audio de 21 (video H.264 se conserva), recodificar completo 1 `.avi`, extraer `HP1.rar` y auditar.
+- [ ] Decisión ya tomada, pendiente de implementar: generar un `.mp4` por idioma de audio (no depender de `video.audioTracks`) y extraer subtítulos a `.vtt` por idioma para `<track>` nativo — se ata al punto "controles propios" del próximo hito de reproductor.
 
 ### Robustez antes de ampliar usuarios
 
