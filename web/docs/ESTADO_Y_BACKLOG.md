@@ -149,6 +149,7 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 - [x] Validar y publicar el primer snapshot de `100_BIBLIOTECA_DE_CURSOS`.
 - [x] Repetir la publicación sin cambios y comprobar que no aparecen duplicados.
 - [x] Aplicar y publicar la regla de secciones semánticas: una carpeta solo es módulo si contiene alguna lección reproducible descendiente.
+- [x] Validar un renombrado reversible en Drive y su restauración sin duplicados ni pérdida de datos privados.
 - [ ] Realizar inventario de códecs y tamaños antes de una importación masiva.
 - [ ] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.
 

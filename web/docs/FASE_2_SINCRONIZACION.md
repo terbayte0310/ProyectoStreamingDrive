@@ -197,7 +197,7 @@ La regresión se comprobó con `Animación Tipográfica Con After Effects`, que 
 - [x] Publicar la sincronización completa y revisar conflictos.
 - [x] Repetir sin cambios y comprobar idempotencia.
 - [x] Renombrar un elemento auxiliar en Drive y comprobar que conserva identidad, jerarquía y lecciones.
-- [ ] Restaurar el nombre original y comprobar una segunda reconciliación.
+- [x] Restaurar el nombre original y comprobar una segunda reconciliación.
 - [ ] Consolidar o retirar rutas experimentales del importador piloto.
 
 ### 2E — secciones semánticas
@@ -221,7 +221,13 @@ La vista renovada de catálogo confirmó el resultado sin alterar datos privados
 
 El 8 de septiembre de 2026 se renombró manualmente la carpeta auxiliar `Subtitles` del curso Adobe a `Subtitles - PRUEBA`, sin moverla. La previsualización conservó exactamente 2 categorías, 4 cursos, 16 secciones, 144 lecciones, 77 auxiliares/no compatibles, 0 conflictos y 1 ignorado. El informe mostró el nombre y la ruta nuevos, incluidos todos los descendientes, y la publicación `50f016e1-2987-4a65-a441-afd304c82cbd` terminó correctamente.
 
-Esto confirma que la identidad se apoya en el ID estable de Drive, no en el nombre: el catálogo actualiza el inventario del elemento sin crear duplicados ni perder datos privados. Falta restaurar `Subtitles` y publicar el recorrido inverso antes de declarar este escenario cerrado.
+Esto confirma que la identidad se apoya en el ID estable de Drive, no en el nombre: el catálogo actualiza el inventario del elemento sin crear duplicados ni perder datos privados.
+
+#### Validación controlada de cambio en Drive — recorrido inverso
+
+La carpeta se restauró manualmente a `Subtitles`. La segunda previsualización mantuvo los mismos contadores: 2 categorías, 4 cursos, 16 secciones, 144 lecciones, 77 auxiliares/no compatibles, 0 conflictos y 1 ignorado. La publicación `4ac7a8ea-8bb3-40b8-9405-4a59c02865f5` terminó correctamente.
+
+Con los dos sentidos publicados, se validó que un renombrado reversible de Drive actualiza y restaura el inventario por identidad estable, sin duplicar entidades ni modificar el orden manual, progreso, notas o la cola de reproducción.
 
 ## Archivos principales
 
@@ -236,4 +242,4 @@ Esto confirma que la identidad se apoya en el ID estable de Drive, no en el nomb
 
 ## Siguiente acción exacta
 
-Restaurar en Drive el nombre `Subtitles` de la carpeta `Subtitles - PRUEBA` dentro de `Adobe Photoshop para corrección de color`. Después, previsualizar desde `/admin`, comprobar que los conteos se mantienen y publicar el recorrido inverso. Por último consolidar o retirar las rutas experimentales del piloto.
+Consolidar o retirar las rutas experimentales del importador piloto AWS (`/api/drive/diagnostic-import` y las rutas de diagnóstico que ya no aporten soporte operativo), sin tocar la ruta estable `/api/drive-token/sync`. Después, empezar la siguiente capa del producto: experiencia de curso y reproductor con árbol expandible y progreso por sección.
