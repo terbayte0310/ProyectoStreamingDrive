@@ -196,7 +196,8 @@ La regresión se comprobó con `Animación Tipográfica Con After Effects`, que 
 - [x] Ejecutar primero un escaneo/previsualización sin publicar.
 - [x] Publicar la sincronización completa y revisar conflictos.
 - [x] Repetir sin cambios y comprobar idempotencia.
-- [ ] Renombrar/mover/agregar un elemento de prueba en Drive y comprobar reconciliación.
+- [x] Renombrar un elemento auxiliar en Drive y comprobar que conserva identidad, jerarquía y lecciones.
+- [ ] Restaurar el nombre original y comprobar una segunda reconciliación.
 - [ ] Consolidar o retirar rutas experimentales del importador piloto.
 
 ### 2E — secciones semánticas
@@ -216,6 +217,12 @@ El 8 de septiembre de 2026 se aplicaron las migraciones de marca semántica y de
 
 La vista renovada de catálogo confirmó el resultado sin alterar datos privados: Adobe pasó de 11 a 5 secciones y AWS de 6 a 5; Animación conserva 5 y DaVinci 1. Las cuatro tarjetas siguen sumando 144 lecciones, Adobe mantiene avance 1/41 y AWS 1/37. Las carpetas auxiliares no se eliminaron de Drive ni del inventario.
 
+#### Validación controlada de cambio en Drive — primer sentido
+
+El 8 de septiembre de 2026 se renombró manualmente la carpeta auxiliar `Subtitles` del curso Adobe a `Subtitles - PRUEBA`, sin moverla. La previsualización conservó exactamente 2 categorías, 4 cursos, 16 secciones, 144 lecciones, 77 auxiliares/no compatibles, 0 conflictos y 1 ignorado. El informe mostró el nombre y la ruta nuevos, incluidos todos los descendientes, y la publicación `50f016e1-2987-4a65-a441-afd304c82cbd` terminó correctamente.
+
+Esto confirma que la identidad se apoya en el ID estable de Drive, no en el nombre: el catálogo actualiza el inventario del elemento sin crear duplicados ni perder datos privados. Falta restaurar `Subtitles` y publicar el recorrido inverso antes de declarar este escenario cerrado.
+
 ## Archivos principales
 
 - `src/lib/drive/catalog-importer.ts`: importador piloto que se reemplazará gradualmente.
@@ -229,4 +236,4 @@ La vista renovada de catálogo confirmó el resultado sin alterar datos privados
 
 ## Siguiente acción exacta
 
-Crear en Drive un cambio controlado y reversible —preferentemente renombrar una carpeta auxiliar `Subtitles` sin moverla—, previsualizar desde `/admin` y comprobar que la sincronización detecta el nombre nuevo sin cambiar el número de lecciones ni el orden manual. Publicar, verificar el resultado y restaurar el nombre original mediante una segunda sincronización. Después consolidar o retirar las rutas experimentales del piloto.
+Restaurar en Drive el nombre `Subtitles` de la carpeta `Subtitles - PRUEBA` dentro de `Adobe Photoshop para corrección de color`. Después, previsualizar desde `/admin`, comprobar que los conteos se mantienen y publicar el recorrido inverso. Por último consolidar o retirar las rutas experimentales del piloto.
