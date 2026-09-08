@@ -24,7 +24,12 @@ export default async function CourseDemoPage({ searchParams }: { searchParams: P
   if (!course) redirect("/catalog");
 
   const [sectionsResult, lessonsResult] = await Promise.all([
-    supabase.from("course_sections").select("id, detected_title, custom_title, parent_section_id, position").eq("course_id", course.id).order("position"),
+    supabase
+      .from("course_sections")
+      .select("id, detected_title, custom_title, parent_section_id, position")
+      .eq("course_id", course.id)
+      .eq("is_detected_section", true)
+      .order("position"),
     supabase.from("lessons").select("id, detected_title, custom_title, section_id, drive_item_id, position").eq("course_id", course.id).order("position"),
   ]);
   const sections = (sectionsResult.data ?? []) as Section[];

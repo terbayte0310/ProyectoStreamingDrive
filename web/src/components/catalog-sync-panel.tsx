@@ -23,6 +23,7 @@ type SyncResult = {
   error?: string;
   issues?: Array<{
     driveFileId: string;
+    isFolder: boolean;
     kind: "conflict" | "ignored" | "unsupported";
     mimeType: string;
     name: string;
@@ -48,7 +49,7 @@ const labels: Array<[keyof SyncSummary, string]> = [
 
 const issueGroups = [
   { kind: "conflict" as const, label: "Conflictos estructurales" },
-  { kind: "unsupported" as const, label: "Archivos no compatibles" },
+  { kind: "unsupported" as const, label: "Elementos auxiliares o no compatibles" },
   { kind: "ignored" as const, label: "Archivos ignorados" },
 ];
 
@@ -134,7 +135,9 @@ export function CatalogSyncPanel() {
                         <li className="rounded-lg bg-slate-900 p-3" key={issue.driveFileId}>
                           <p className="text-sm font-medium text-slate-100">{issue.name}</p>
                           <p className="mt-1 break-all text-xs text-slate-400">{issue.path}</p>
-                          <p className="mt-1 break-all text-xs text-slate-500">{issue.mimeType}</p>
+                          <p className="mt-1 break-all text-xs text-slate-500">
+                            {issue.isFolder ? "Carpeta auxiliar" : issue.mimeType}
+                          </p>
                         </li>
                       ))}
                     </ul>

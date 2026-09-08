@@ -95,6 +95,7 @@ export default async function CatalogPage() {
       supabase
         .from("course_sections")
         .select("id, course_id, parent_section_id, position")
+        .eq("is_detected_section", true)
         .eq("is_visible", true),
       supabase
         .from("lessons")

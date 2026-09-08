@@ -20,7 +20,8 @@ export default async function AdminPage() {
       .order("position"),
     supabase
       .from("course_sections")
-      .select("id, course_id, parent_section_id, detected_title, custom_title, position, is_visible"),
+      .select("id, course_id, parent_section_id, detected_title, custom_title, position, is_visible")
+      .eq("is_detected_section", true),
     supabase
       .from("lessons")
       .select("id, course_id, section_id, detected_title, custom_title, position, is_visible"),

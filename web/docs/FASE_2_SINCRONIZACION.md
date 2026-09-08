@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** biblioteca completa publicada y validada de extremo a extremo; falta probar una modificación controlada en Drive y retirar rutas piloto.
+**Estado:** biblioteca completa publicada y validada de extremo a extremo; la normalización de carpetas auxiliares está lista localmente y espera aplicar su migración antes de la siguiente publicación.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -42,6 +42,11 @@ Reglas iniciales:
 - Archivos conocidos como basura (`desktop.ini`, `.DS_Store`, `Thumbs.db` y nombres ocultos) quedan `ignored`.
 - Otros archivos se inventarían como `unsupported`; no se borran ni se convierten todavía en lecciones.
 - Los archivos sueltos en la raíz o directamente dentro de una categoría son conflictos estructurales y se registran, no se adivina su destino.
+
+Regla refinada para secciones dentro de un curso:
+
+- Una carpeta se presenta como sección solamente si contiene, de forma directa o en un descendiente, al menos una lección reproducible.
+- Una carpeta sin lecciones reproducibles (por ejemplo, `Subtitles` o `Recursos`) se conserva en el inventario como `unsupported`, pero no se presenta como módulo del curso.
 
 ## Invariantes no negociables
 
@@ -194,6 +199,16 @@ La regresión se comprobó con `Animación Tipográfica Con After Effects`, que 
 - [ ] Renombrar/mover/agregar un elemento de prueba en Drive y comprobar reconciliación.
 - [ ] Consolidar o retirar rutas experimentales del importador piloto.
 
+### 2E — secciones semánticas
+
+- [x] Detectar en el snapshot las carpetas auxiliares sin lecciones reproducibles descendientes.
+- [x] Mantener esos elementos en el informe de sincronización, incluidos sus nombres, rutas y MIME.
+- [x] Preparar la migración `20260908010000_hide_auxiliary_sections.sql`.
+- [ ] Aplicar la migración en Supabase y confirmar `Success. No rows returned`.
+- [ ] Previsualizar y publicar de nuevo la biblioteca; verificar que los módulos auxiliares ya no se muestran y que las lecciones siguen siendo 144.
+
+La migración añade `course_sections.is_detected_section`. Esta marca es automática y representa la interpretación vigente de Drive; no sustituye `is_visible`, que sigue siendo la decisión manual del administrador. Durante la siguiente publicación, las filas históricas que ya existan para `Subtitles`, `Recursos` u otra carpeta auxiliar se marcarán como no detectadas en vez de borrarse. De este modo se preservan referencias y personalizaciones, pero catálogo, reproductor y editor no las incorporan al árbol visible.
+
 ## Archivos principales
 
 - `src/lib/drive/catalog-importer.ts`: importador piloto que se reemplazará gradualmente.
@@ -207,4 +222,4 @@ La regresión se comprobó con `Animación Tipográfica Con After Effects`, que 
 
 ## Siguiente acción exacta
 
-Crear en Drive un cambio controlado y reversible —por ejemplo, añadir una carpeta/lección de prueba o renombrar temporalmente un elemento—, previsualizarlo y comprobar la reconciliación antes de decidir si se publica. Después consolidar o retirar las rutas experimentales del piloto.
+Aplicar en el SQL Editor de Supabase el contenido de `supabase/migrations/20260908010000_hide_auxiliary_sections.sql`. Después, desde `/admin`, hacer una previsualización: comprobar que las carpetas auxiliares aumentan el contador de elementos no compatibles y reducen el de secciones, sin cambiar las 144 lecciones. Solo entonces publicar y revisar el árbol de un curso con subtítulos. Tras este cierre, crear en Drive un cambio controlado y reversible y comprobar la reconciliación antes de retirar las rutas piloto.

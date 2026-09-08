@@ -121,6 +121,7 @@ export default function CoursePlayerContent() {
             .from("course_sections")
             .select("id, course_id, parent_section_id, position")
             .eq("course_id", requestedLesson.course_id)
+            .eq("is_detected_section", true)
             .eq("is_visible", true)
             .order("position"),
         ]);

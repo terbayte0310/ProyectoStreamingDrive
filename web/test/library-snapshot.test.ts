@@ -74,6 +74,28 @@ test("classifies ignored, unsupported and structurally conflicting files", async
   assert.equal(issues.get("guia.pdf")?.path, "100_BIBLIOTECA_DE_CURSOS / AWS / Lambda / guia.pdf");
 });
 
+test("keeps only folders with playable descendants as sections", async () => {
+  const snapshot = await scanDriveLibrary({
+    listChildren: fakeDrive({
+      root: [folder("category", "Diseño")],
+      category: [folder("course", "Curso")],
+      course: [folder("module", "Módulo"), folder("subtitles", "Subtitles")],
+      module: [file("lesson", "01.mp4")],
+      subtitles: [folder("subtitles-part", "Parte 1")],
+      "subtitles-part": [file("subtitle", "01.srt", "application/octet-stream")],
+    }),
+    rootFolderId: "root",
+  });
+
+  const items = new Map(snapshot.items.map((item) => [item.driveFileId, item]));
+  assert.equal(items.get("module")?.kind, "section");
+  assert.equal(items.get("subtitles")?.kind, "unsupported");
+  assert.equal(items.get("subtitles-part")?.kind, "unsupported");
+  assert.equal(items.get("subtitle")?.parentSectionDriveFileId, null);
+  assert.equal(snapshot.counters.sections, 1);
+  assert.equal(snapshot.counters.unsupported, 3);
+});
+
 test("loads every Drive page and returns natural order", async () => {
   const requestedUrls: string[] = [];
   const responses = [

@@ -59,6 +59,7 @@ export type LibrarySnapshot = {
 
 export type LibrarySnapshotIssue = {
   driveFileId: string;
+  isFolder: boolean;
   kind: "conflict" | "ignored" | "unsupported";
   mimeType: string;
   name: string;
@@ -142,6 +143,40 @@ function toSnapshotItem({
     parentSectionDriveFileId,
     status: kind === "ignored" ? "ignored" : kind === "unsupported" || kind === "conflict" ? "unsupported" : "available",
   };
+}
+
+function demoteAuxiliarySections(items: LibrarySnapshotItem[]) {
+  const itemsById = new Map(items.map((item) => [item.driveFileId, item]));
+  const teachingSectionIds = new Set<string>();
+
+  for (const lesson of items.filter((item) => item.kind === "lesson")) {
+    let ancestorId = lesson.parentDriveFileId;
+    const visited = new Set<string>();
+    while (ancestorId && !visited.has(ancestorId)) {
+      visited.add(ancestorId);
+      const ancestor = itemsById.get(ancestorId);
+      if (!ancestor) break;
+      if (ancestor.kind === "section") teachingSectionIds.add(ancestor.driveFileId);
+      ancestorId = ancestor.parentDriveFileId;
+    }
+  }
+
+  for (const item of items) {
+    if (item.kind === "section" && !teachingSectionIds.has(item.driveFileId)) {
+      item.kind = "unsupported";
+      item.parentSectionDriveFileId = null;
+      item.status = "unsupported";
+    }
+  }
+
+  for (const item of items) {
+    if (
+      item.parentSectionDriveFileId &&
+      itemsById.get(item.parentSectionDriveFileId)?.kind !== "section"
+    ) {
+      item.parentSectionDriveFileId = null;
+    }
+  }
 }
 
 export async function scanDriveLibrary({
@@ -236,6 +271,8 @@ export async function scanDriveLibrary({
     }
   }
 
+  demoteAuxiliarySections(items);
+
   const count = (kind: SnapshotKind) => items.filter((item) => item.kind === kind).length;
   return {
     counters: {
@@ -279,6 +316,7 @@ export function listLibrarySnapshotIssues(snapshot: LibrarySnapshot): LibrarySna
     ))
     .map((item) => ({
       driveFileId: item.driveFileId,
+      isFolder: item.isFolder,
       kind: item.kind,
       mimeType: item.mimeType,
       name: item.name,
