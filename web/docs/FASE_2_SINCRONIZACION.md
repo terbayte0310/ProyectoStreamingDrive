@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** checkpoints 2A y 2B validados; 2C en implementación.
+**Estado:** checkpoints 2A, 2B y la previsualización segura de 2C validados; falta apuntar a la raíz completa y publicar.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -141,12 +141,25 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 ### 2C — operación administrativa
 
 - [x] Crear endpoint exclusivo para administrador usando la sesión renovable de Drive.
-- [ ] Añadir acción de sincronización y mostrar ejecución, estado y contadores.
+- [x] Añadir acción de previsualización/publicación y mostrar estado y contadores.
 - [x] Impedir ejecuciones concurrentes mediante índice único y respuesta `409`.
 
-El endpoint es `POST /api/drive-token/sync` y acepta `{ "mode": "preview" }` o `{ "mode": "publish" }`. Está bajo `/api/drive-token` para recibir las cookies de Drive sin ampliar su alcance. Siempre obtiene un token nuevo antes del recorrido. `preview` no escribe catálogo; `publish` exige `confirmRootChange: true` cuando la raíz configurada difiere de la fuente existente.
+El endpoint es `POST /api/drive-token/sync` y acepta `{ "mode": "preview" }` o `{ "mode": "publish" }`. Está bajo `/api/drive-token` para recibir las cookies de Drive sin ampliar su alcance. Siempre obtiene un token nuevo antes del recorrido. `preview` no escribe catálogo y devuelve una huella SHA-256 del snapshot. `publish` exige esa misma huella, vuelve a recorrer Drive y rechaza la operación si algo cambió; también exige `confirmRootChange: true` cuando la raíz configurada difiere de la fuente existente.
 
 La publicación usa la sobrecarga RPC de `20260907234000_atomic_source_root_transition.sql`: reconciliación y transición de raíz pertenecen a la misma transacción.
+
+#### Validación real con la raíz piloto
+
+El 7 de septiembre de 2026 se ejecutó `Previsualizar` desde `/admin` con la sesión real de Drive. El recorrido terminó correctamente y mostró:
+
+- 1 categoría, 6 cursos, 0 secciones y 37 lecciones.
+- 5 archivos no compatibles, 0 conflictos y 1 archivo ignorado.
+- Aviso explícito de que `GOOGLE_DRIVE_ROOT_FOLDER_ID` todavía apunta a la carpeta piloto AWS.
+- Ningún botón de publicación disponible (`0` coincidencias en la interfaz).
+
+Estos conteos **no representan todavía la jerarquía final**: al usar AWS como raíz, sus cursos se interpretan como categorías y sus secciones como cursos. La prueba únicamente confirma que el escaneo real funciona y que tanto la interfaz como el servidor impiden publicar esa interpretación incorrecta. `preview` no realizó escrituras en el catálogo.
+
+La interfaz solo conserva el bloqueo mientras la raíz configurada siga siendo la misma raíz piloto. Cuando `.env.local` apunte a la biblioteca completa, mostrará la confirmación de transición. La publicación queda vinculada criptográficamente a la última previsualización; un cambio intermedio en Drive obliga a revisar los contadores otra vez.
 
 ### 2D — validación real y retiro del piloto
 
@@ -170,4 +183,4 @@ La publicación usa la sobrecarga RPC de `20260907234000_atomic_source_root_tran
 
 ## Siguiente acción exacta
 
-Aplicar `supabase/migrations/20260907234000_atomic_source_root_transition.sql`, ejecutar pruebas/lint/build y después construir el panel administrativo de previsualización. No cambiar todavía la variable raíz ni publicar sobre el catálogo real.
+Obtener el ID de `100_BIBLIOTECA_DE_CURSOS`, cambiar únicamente `GOOGLE_DRIVE_ROOT_FOLDER_ID` en `.env.local`, reiniciar Next.js y ejecutar una nueva previsualización desde `/admin`. No publicar hasta revisar sus contadores, archivos no compatibles y conflictos.

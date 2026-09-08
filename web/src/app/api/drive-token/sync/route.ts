@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentAccess } from "@/lib/auth/access";
@@ -17,6 +19,12 @@ export const dynamic = "force-dynamic";
 type SyncMode = "preview" | "publish";
 type Source = { drive_root_folder_id: string; id: string; name: string };
 
+function fingerprintSnapshot(rootFolderId: string, items: unknown[]) {
+  return createHash("sha256")
+    .update(JSON.stringify({ items, rootFolderId }))
+    .digest("hex");
+}
+
 export async function POST(request: NextRequest) {
   const access = await getCurrentAccess();
   if (!access) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
@@ -32,7 +40,7 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  let body: { confirmRootChange?: unknown; mode?: unknown };
+  let body: { confirmRootChange?: unknown; mode?: unknown; previewFingerprint?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -62,6 +70,7 @@ export async function POST(request: NextRequest) {
       listChildren: (parentId) => listDriveChildren(token.access_token!, parentId),
       rootFolderId: config.rootFolderId,
     });
+    const previewFingerprint = fingerprintSnapshot(config.rootFolderId, snapshot.items);
     const supabase = await createSupabaseServerClient();
     const { data: sources, error: sourceError } = await supabase
       .from("library_sources")
@@ -76,21 +85,37 @@ export async function POST(request: NextRequest) {
     }
 
     const existingSource = sources?.[0] ?? null;
+    const pilotRootConfigured = Boolean(
+      existingSource?.name.toLocaleLowerCase().includes("prueba"),
+    );
     const rootChangeRequired = Boolean(
       existingSource && existingSource.drive_root_folder_id !== config.rootFolderId,
     );
     if (mode === "preview") {
       return respond({
         mode,
+        pilotRootConfigured,
         rootChangeRequired,
         sourceExists: Boolean(existingSource),
         summary: snapshot.counters,
+        previewFingerprint,
       });
+    }
+    if (pilotRootConfigured && !rootChangeRequired) {
+      return respond({
+        error: "La configuración todavía apunta a la raíz piloto. Cambia primero a 100_BIBLIOTECA_DE_CURSOS.",
+        pilotRootConfigured: true,
+      }, 409);
     }
     if (rootChangeRequired && body.confirmRootChange !== true) {
       return respond({
         error: "La raíz configurada cambió. Previsualiza y confirma la transición antes de publicar.",
         rootChangeRequired: true,
+      }, 409);
+    }
+    if (body.previewFingerprint !== previewFingerprint) {
+      return respond({
+        error: "Drive cambió desde la última previsualización. Previsualiza de nuevo antes de publicar.",
       }, 409);
     }
 
@@ -133,7 +158,7 @@ export async function POST(request: NextRequest) {
       throw new Error("La publicación atómica fue rechazada.");
     }
 
-    return respond({ mode, rootChangeRequired, runId: run.id, summary });
+    return respond({ mode, pilotRootConfigured: false, rootChangeRequired, runId: run.id, summary });
   } catch (error) {
     return respond({
       error: error instanceof Error ? error.message : "La sincronización no pudo completarse.",

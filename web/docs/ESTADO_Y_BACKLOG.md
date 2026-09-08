@@ -1,7 +1,7 @@
 # Estado y backlog — Biblioteca personal de cursos
 
 **Última actualización:** 7 de septiembre de 2026  
-**Estado:** MVP funcional para el curso piloto de AWS.  
+**Estado:** MVP funcional; sincronización integral implementada y validada hasta la previsualización segura de la raíz piloto.
 **Repositorio:** Git local en `ProyectoStreamingDrive`; todavía no hay remoto configurado.
 
 ## Propósito del proyecto
@@ -103,6 +103,11 @@ La ruta segura para navegador es MP4 con video H.264 y audio AAC. MKV, AVI, cód
 | `3c25556` | Notas por lección ancladas al segundo actual. |
 | `a96a13b` | Porcentaje de curso y reanudación desde el catálogo. |
 | `8834546` | Descarga directa desde Google Drive; documenta la corrección de descarga y actualización del Worker. |
+| `f21967c` | Cierre validado del flujo usable, administración y sesión renovable de Drive. |
+| `4c3be4d` | Snapshot completo y probado de la jerarquía de Drive. |
+| `17a284d` | Reconciliación atómica del catálogo en Supabase. |
+| `2f67633` / `be8f9d6` | Pruebas transaccionales y corrección de su arnés temporal. |
+| `98653a1` | API segura de previsualización, publicación y transición de raíz. |
 
 ### Convención para futuros commits
 
@@ -129,13 +134,15 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 - [x] Editar título, autor, plataforma, fecha, descripción, portada y visibilidad de cursos, sin modificar Drive.
 - [x] Editar títulos y orden de secciones y lecciones sin modificar Drive.
 - [ ] Añadir portadas manuales y preparar soporte para portadas generadas desde un frame.
-- [ ] Mostrar estado y resultado de cada sincronización de Drive.
+- [x] Mostrar la previsualización y sus contadores en el panel administrativo.
+- [ ] Mostrar el historial persistente de ejecuciones publicadas y fallidas.
 
 ### Importación y calidad del catálogo
 
 - [x] Diseñar la sincronización repetible para el resto de la biblioteca. Véase `docs/FASE_2_SINCRONIZACION.md`.
-- [ ] Implementar snapshot completo y reconciliación atómica para el resto de la biblioteca.
-- [ ] Detectar y presentar conflictos de orden, carpetas de recursos y archivos no compatibles.
+- [x] Implementar snapshot completo y reconciliación atómica para el resto de la biblioteca.
+- [x] Detectar y presentar en la previsualización conflictos estructurales, ignorados y archivos no compatibles.
+- [ ] Validar y publicar el primer snapshot de `100_BIBLIOTECA_DE_CURSOS`.
 - [ ] Realizar inventario de códecs y tamaños antes de una importación masiva.
 - [ ] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.
 

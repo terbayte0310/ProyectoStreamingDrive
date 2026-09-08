@@ -4,6 +4,7 @@ import {
   type AdminLesson,
   type AdminSection,
 } from "@/components/admin-course-manager";
+import { CatalogSyncPanel } from "@/components/catalog-sync-panel";
 import { requireAdminAccess } from "@/lib/auth/access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -40,11 +41,14 @@ export default async function AdminPage() {
         {error ? (
           <p className="mt-8 text-rose-200">No se pudo cargar el catálogo para editar.</p>
         ) : (
-          <AdminCourseManager
-            courses={(coursesResult.data ?? []) as AdminCourse[]}
-            lessons={(lessonsResult.data ?? []) as AdminLesson[]}
-            sections={(sectionsResult.data ?? []) as AdminSection[]}
-          />
+          <>
+            <CatalogSyncPanel />
+            <AdminCourseManager
+              courses={(coursesResult.data ?? []) as AdminCourse[]}
+              lessons={(lessonsResult.data ?? []) as AdminLesson[]}
+              sections={(sectionsResult.data ?? []) as AdminSection[]}
+            />
+          </>
         )}
       </section>
     </main>
