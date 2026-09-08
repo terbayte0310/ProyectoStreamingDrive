@@ -1,7 +1,7 @@
 # Estado y backlog — Biblioteca personal de cursos
 
 **Última actualización:** 8 de septiembre de 2026
-**Estado:** MVP funcional; biblioteca completa publicada, reproducible e idempotente. La limpieza semántica de secciones auxiliares está preparada y pendiente de aplicar/publicar.
+**Estado:** MVP funcional; biblioteca completa publicada, reproducible e idempotente. La limpieza semántica de secciones auxiliares ya está publicada.
 **Repositorio:** Git local en `ProyectoStreamingDrive`; todavía no hay remoto configurado.
 
 ## Propósito del proyecto
@@ -109,6 +109,8 @@ La ruta segura para navegador es MP4 con video H.264 y audio AAC. MKV, AVI, cód
 | `2f67633` / `be8f9d6` | Pruebas transaccionales y corrección de su arnés temporal. |
 | `98653a1` | API segura de previsualización, publicación y transición de raíz. |
 | Pendiente de commit | Carpetas auxiliares dejan de presentarse como secciones, sin perder inventario ni visibilidad manual. |
+| `c6c8bb0` | Clasificación semántica de carpetas auxiliares y filtros de catálogo/reproductor/editor. |
+| `378cf39` | Recarga explícita del esquema API de Supabase tras la migración. |
 
 ### Convención para futuros commits
 
@@ -146,7 +148,7 @@ Cuando exista un error relevante, incluir explícitamente: **síntoma**, **causa
 - [x] Previsualizar `100_BIBLIOTECA_DE_CURSOS`: 2 categorías, 4 cursos, 23 secciones y 144 lecciones; ningún video descartado.
 - [x] Validar y publicar el primer snapshot de `100_BIBLIOTECA_DE_CURSOS`.
 - [x] Repetir la publicación sin cambios y comprobar que no aparecen duplicados.
-- [ ] Aplicar y publicar la regla de secciones semánticas: una carpeta solo es módulo si contiene alguna lección reproducible descendiente.
+- [x] Aplicar y publicar la regla de secciones semánticas: una carpeta solo es módulo si contiene alguna lección reproducible descendiente.
 - [ ] Realizar inventario de códecs y tamaños antes de una importación masiva.
 - [ ] Definir reglas de normalización que nunca modifiquen archivos de Drive sin decisión explícita.
 

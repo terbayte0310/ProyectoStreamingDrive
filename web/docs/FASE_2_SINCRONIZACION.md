@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** biblioteca completa publicada y validada de extremo a extremo; la normalización de carpetas auxiliares está lista localmente y espera aplicar su migración antes de la siguiente publicación.
+**Estado:** biblioteca completa publicada, reproducible e idempotente; secciones auxiliares normalizadas y publicadas. Falta validar un cambio controlado en Drive y retirar rutas piloto.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -205,10 +205,16 @@ La regresión se comprobó con `Animación Tipográfica Con After Effects`, que 
 - [x] Mantener esos elementos en el informe de sincronización, incluidos sus nombres, rutas y MIME.
 - [x] Preparar la migración `20260908010000_hide_auxiliary_sections.sql`.
 - [x] Aplicar `20260908010000_hide_auxiliary_sections.sql` en Supabase y confirmar `Success. No rows returned`.
-- [ ] Recargar el esquema de la API con `20260908010100_reload_postgrest_schema.sql` antes de abrir las consultas que usan la columna nueva.
-- [ ] Previsualizar y publicar de nuevo la biblioteca; verificar que los módulos auxiliares ya no se muestran y que las lecciones siguen siendo 144.
+- [x] Recargar el esquema de la API con `20260908010100_reload_postgrest_schema.sql`.
+- [x] Previsualizar y publicar de nuevo la biblioteca; verificar que los módulos auxiliares ya no se muestran y que las lecciones siguen siendo 144.
 
-La migración añade `course_sections.is_detected_section`. Esta marca es automática y representa la interpretación vigente de Drive; no sustituye `is_visible`, que sigue siendo la decisión manual del administrador. Durante la siguiente publicación, las filas históricas que ya existan para `Subtitles`, `Recursos` u otra carpeta auxiliar se marcarán como no detectadas en vez de borrarse. De este modo se preservan referencias y personalizaciones, pero catálogo, reproductor y editor no las incorporan al árbol visible.
+La migración añade `course_sections.is_detected_section`. Esta marca es automática y representa la interpretación vigente de Drive; no sustituye `is_visible`, que sigue siendo la decisión manual del administrador. Las filas históricas de `Subtitles`, `Recursos` u otra carpeta auxiliar se marcan como no detectadas en vez de borrarse. De este modo se preservan referencias y personalizaciones, pero catálogo, reproductor y editor no las incorporan al árbol visible.
+
+#### Validación real de secciones semánticas
+
+El 8 de septiembre de 2026 se aplicaron las migraciones de marca semántica y de recarga del esquema de Supabase. La previsualización real devolvió 2 categorías, 4 cursos, **16 secciones**, 144 lecciones, 77 elementos auxiliares/no compatibles, 0 conflictos y 1 ignorado. La publicación `a80bde25-5882-474b-93bc-30d6bdacb1f4` terminó correctamente.
+
+La vista renovada de catálogo confirmó el resultado sin alterar datos privados: Adobe pasó de 11 a 5 secciones y AWS de 6 a 5; Animación conserva 5 y DaVinci 1. Las cuatro tarjetas siguen sumando 144 lecciones, Adobe mantiene avance 1/41 y AWS 1/37. Las carpetas auxiliares no se eliminaron de Drive ni del inventario.
 
 ## Archivos principales
 
@@ -223,4 +229,4 @@ La migración añade `course_sections.is_detected_section`. Esta marca es autom�
 
 ## Siguiente acción exacta
 
-Aplicar en el SQL Editor de Supabase el contenido de `supabase/migrations/20260908010100_reload_postgrest_schema.sql`. Después, desde `/admin`, hacer una previsualización: comprobar que las carpetas auxiliares aumentan el contador de elementos no compatibles y reducen el de secciones, sin cambiar las 144 lecciones. Solo entonces publicar y revisar el árbol de un curso con subtítulos. Tras este cierre, crear en Drive un cambio controlado y reversible y comprobar la reconciliación antes de retirar las rutas piloto.
+Crear en Drive un cambio controlado y reversible —preferentemente renombrar una carpeta auxiliar `Subtitles` sin moverla—, previsualizar desde `/admin` y comprobar que la sincronización detecta el nombre nuevo sin cambiar el número de lecciones ni el orden manual. Publicar, verificar el resultado y restaurar el nombre original mediante una segunda sincronización. Después consolidar o retirar las rutas experimentales del piloto.
