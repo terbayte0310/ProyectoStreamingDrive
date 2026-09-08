@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** checkpoints 2A, 2B y 2C validados; raíz completa previsualizada y pendiente de primera publicación autorizada.
+**Estado:** biblioteca completa publicada y validada de extremo a extremo; falta probar una modificación controlada en Drive y retirar rutas piloto.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -171,12 +171,26 @@ Después de cambiar `GOOGLE_DRIVE_ROOT_FOLDER_ID`, la previsualización real del
 
 Se añadió al panel un informe desplegable con nombre, ruta completa y MIME de cada elemento señalado. La revisión de los 70 no compatibles encontró 59 subtítulos `.srt`, 1 RAR, 1 imagen WebP, 1 PDF, 3 accesos `.url` y 5 textos; **no hay videos descartados por formato**. Estos materiales no entran en la cola de reproducción. Algunas carpetas que solo agrupan recursos o subtítulos sí cuentan hoy como secciones administrativas; es una mejora de presentación posterior, no un riesgo para la publicación atómica ni para las lecciones.
 
+#### Publicación e idempotencia reales
+
+La primera publicación completó la ejecución `f0e6c5e5-192e-46a3-a958-b72506a000df`. El catálogo mostró exactamente las 2 categorías y los 4 cursos previstos. Se abrió y reprodujo una lección de Adobe; el avance quedó guardado y la tarjeta pasó a ofrecer `Continuar viendo`.
+
+El curso AWS mantuvo sus 37 lecciones, el progreso previo, la lección reanudable y las dos notas existentes. Esto confirma que la transición promovió la misma fuente y conservó los IDs, en vez de duplicar el piloto.
+
+Se repitieron previsualización y publicación sin cambios. Los conteos permanecieron en 2 categorías, 4 cursos, 23 secciones y 144 lecciones, y la ejecución `f2474874-7fb9-4a39-897b-bc6b8d2b14b7` terminó correctamente. El catálogo continuó mostrando solo cuatro cursos: idempotencia real validada.
+
+Durante esta validación se encontró que `router.refresh()` entregaba datos nuevos al panel, pero `AdminCourseManager` conservaba sus estados iniciales. La página ahora calcula una revisión de los datos recibidos y la usa como `key`: React recrea el editor únicamente cuando el catálogo servido cambia, sin efectos que dupliquen renders.
+
+La primera prueba de Adobe también reveló que el botón `Empezar curso` elegía entre lecciones ordenadas solo por `position`. Como esa posición es local a cada sección, abrió el módulo 3 en vez del primero. El catálogo ahora usa `buildCoursePlaybackQueue`, el mismo recorrido jerárquico y aislado por curso que usa el reproductor; comenzar, repasar y buscar la primera lección pendiente respetan el orden real de secciones y lecciones.
+
+La regresión se comprobó con `Animación Tipográfica Con After Effects`, que no tenía progreso: `Empezar curso` abrió `1806-01 - Presentación`, y la cola visible continuó ordenada hasta `1806-18`.
+
 ### 2D — validación real y retiro del piloto
 
 - [x] Cambiar `GOOGLE_DRIVE_ROOT_FOLDER_ID` de `AWS` a `100_BIBLIOTECA_DE_CURSOS`.
 - [x] Ejecutar primero un escaneo/previsualización sin publicar.
-- [ ] Publicar la sincronización completa y revisar conflictos.
-- [ ] Repetir sin cambios y comprobar idempotencia.
+- [x] Publicar la sincronización completa y revisar conflictos.
+- [x] Repetir sin cambios y comprobar idempotencia.
 - [ ] Renombrar/mover/agregar un elemento de prueba en Drive y comprobar reconciliación.
 - [ ] Consolidar o retirar rutas experimentales del importador piloto.
 
@@ -193,4 +207,4 @@ Se añadió al panel un informe desplegable con nombre, ruta completa y MIME de 
 
 ## Siguiente acción exacta
 
-Con autorización del propietario, marcar la confirmación y publicar el snapshot ya revisado desde `/admin`. Después comprobar catálogo, reproducción del curso AWS y uno de Adobe; finalmente repetir la previsualización/publicación sin cambios para validar la idempotencia real.
+Crear en Drive un cambio controlado y reversible —por ejemplo, añadir una carpeta/lección de prueba o renombrar temporalmente un elemento—, previsualizarlo y comprobar la reconciliación antes de decidir si se publica. Después consolidar o retirar las rutas experimentales del piloto.

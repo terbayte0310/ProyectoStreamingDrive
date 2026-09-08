@@ -26,6 +26,10 @@ export default async function AdminPage() {
       .select("id, course_id, section_id, detected_title, custom_title, position, is_visible"),
   ]);
   const error = coursesResult.error ?? sectionsResult.error ?? lessonsResult.error;
+  const courses = (coursesResult.data ?? []) as AdminCourse[];
+  const lessons = (lessonsResult.data ?? []) as AdminLesson[];
+  const sections = (sectionsResult.data ?? []) as AdminSection[];
+  const catalogRevision = JSON.stringify([courses, lessons, sections]);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
@@ -44,9 +48,10 @@ export default async function AdminPage() {
           <>
             <CatalogSyncPanel />
             <AdminCourseManager
-              courses={(coursesResult.data ?? []) as AdminCourse[]}
-              lessons={(lessonsResult.data ?? []) as AdminLesson[]}
-              sections={(sectionsResult.data ?? []) as AdminSection[]}
+              courses={courses}
+              key={catalogRevision}
+              lessons={lessons}
+              sections={sections}
             />
           </>
         )}

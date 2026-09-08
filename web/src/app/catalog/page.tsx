@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { buildCoursePlaybackQueue } from "@/lib/catalog/outline";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Category = {
@@ -23,9 +24,15 @@ type Lesson = {
   detected_title: string;
   id: string;
   position: number;
+  section_id: string | null;
 };
 
-type SectionReference = { course_id: string };
+type SectionReference = {
+  course_id: string;
+  id: string;
+  parent_section_id: string | null;
+  position: number;
+};
 
 type Progress = {
   lesson_id: string;
@@ -85,10 +92,13 @@ export default async function CatalogPage() {
         .select("id, category_id, detected_title, custom_title, position")
         .eq("is_visible", true)
         .order("position"),
-      supabase.from("course_sections").select("course_id").eq("is_visible", true),
+      supabase
+        .from("course_sections")
+        .select("id, course_id, parent_section_id, position")
+        .eq("is_visible", true),
       supabase
         .from("lessons")
-        .select("id, course_id, detected_title, custom_title, position")
+        .select("id, course_id, detected_title, custom_title, section_id, position")
         .eq("is_visible", true)
         .order("position"),
       supabase
@@ -120,7 +130,7 @@ export default async function CatalogPage() {
   );
 
   function renderCourseCard(course: Course) {
-    const courseLessons = lessons.filter((lesson) => lesson.course_id === course.id);
+    const courseLessons = buildCoursePlaybackQueue(course.id, lessons, sections);
     const sectionCount = sections.filter((section) => section.course_id === course.id).length;
     const completedCount = courseLessons.filter(
       (lesson) => progressByLesson.get(lesson.id)?.state === "completed",
