@@ -1,7 +1,7 @@
 # Fase 2 — sincronización integral de Google Drive
 
 **Inicio:** 7 de septiembre de 2026
-**Estado:** checkpoint 2A implementado y validado; 2B pendiente.
+**Estado:** checkpoint 2A validado; migración 2B aplicada en Supabase y pendiente de prueba transaccional.
 **Commit base estable:** `f21967c`
 
 Este documento es el punto de reanudación de la fase. Debe actualizarse después de cada checkpoint y antes de terminar una sesión.
@@ -125,7 +125,8 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 ### 2B — reconciliación transaccional
 
 - [x] Redactar migración y RPC atómica (`20260907230000_atomic_library_sync.sql`).
-- [ ] Aplicar la migración en Supabase y ejecutar pruebas transaccionales controladas.
+- [x] Aplicar la migración en Supabase (`Success. No rows returned`).
+- [ ] Ejecutar pruebas transaccionales controladas.
 - [ ] Preservar campos manuales y datos privados.
 - [ ] Marcar ausentes y restaurados sin borrar entidades.
 - [ ] Probar dos ejecuciones idénticas y una ejecución con cambios.
@@ -158,4 +159,4 @@ Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas total
 
 ## Siguiente acción exacta
 
-Revisar y aplicar `supabase/migrations/20260907230000_atomic_library_sync.sql` en Supabase. Después crear una ejecución y llamar la RPC con un snapshot pequeño/controlado dentro de una fuente de prueba o una transacción que se revierta. No cambiar todavía la variable raíz ni ejecutar sobre el catálogo real.
+Ejecutar `supabase/tests/atomic_library_sync_test.sql` en Supabase. La prueba debe terminar correctamente y revertir sus datos. No cambiar todavía la variable raíz ni ejecutar sobre el catálogo real.
