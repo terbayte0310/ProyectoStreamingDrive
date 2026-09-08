@@ -204,7 +204,8 @@ La regresión se comprobó con `Animación Tipográfica Con After Effects`, que 
 - [x] Detectar en el snapshot las carpetas auxiliares sin lecciones reproducibles descendientes.
 - [x] Mantener esos elementos en el informe de sincronización, incluidos sus nombres, rutas y MIME.
 - [x] Preparar la migración `20260908010000_hide_auxiliary_sections.sql`.
-- [ ] Aplicar la migración en Supabase y confirmar `Success. No rows returned`.
+- [x] Aplicar `20260908010000_hide_auxiliary_sections.sql` en Supabase y confirmar `Success. No rows returned`.
+- [ ] Recargar el esquema de la API con `20260908010100_reload_postgrest_schema.sql` antes de abrir las consultas que usan la columna nueva.
 - [ ] Previsualizar y publicar de nuevo la biblioteca; verificar que los módulos auxiliares ya no se muestran y que las lecciones siguen siendo 144.
 
 La migración añade `course_sections.is_detected_section`. Esta marca es automática y representa la interpretación vigente de Drive; no sustituye `is_visible`, que sigue siendo la decisión manual del administrador. Durante la siguiente publicación, las filas históricas que ya existan para `Subtitles`, `Recursos` u otra carpeta auxiliar se marcarán como no detectadas en vez de borrarse. De este modo se preservan referencias y personalizaciones, pero catálogo, reproductor y editor no las incorporan al árbol visible.
@@ -222,4 +223,4 @@ La migración añade `course_sections.is_detected_section`. Esta marca es autom�
 
 ## Siguiente acción exacta
 
-Aplicar en el SQL Editor de Supabase el contenido de `supabase/migrations/20260908010000_hide_auxiliary_sections.sql`. Después, desde `/admin`, hacer una previsualización: comprobar que las carpetas auxiliares aumentan el contador de elementos no compatibles y reducen el de secciones, sin cambiar las 144 lecciones. Solo entonces publicar y revisar el árbol de un curso con subtítulos. Tras este cierre, crear en Drive un cambio controlado y reversible y comprobar la reconciliación antes de retirar las rutas piloto.
+Aplicar en el SQL Editor de Supabase el contenido de `supabase/migrations/20260908010100_reload_postgrest_schema.sql`. Después, desde `/admin`, hacer una previsualización: comprobar que las carpetas auxiliares aumentan el contador de elementos no compatibles y reducen el de secciones, sin cambiar las 144 lecciones. Solo entonces publicar y revisar el árbol de un curso con subtítulos. Tras este cierre, crear en Drive un cambio controlado y reversible y comprobar la reconciliación antes de retirar las rutas piloto.
