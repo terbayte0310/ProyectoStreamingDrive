@@ -122,6 +122,13 @@ Implementación: `src/lib/drive/library-snapshot.ts`. El módulo recibe `listChi
 
 Pruebas: `test/library-snapshot.test.ts`. Al terminar 2A existen 8 pruebas totales en el proyecto y pasan junto con lint y build.
 
+### Registro de prueba 2B
+
+- Primer intento de `atomic_library_sync_test.sql`: falló con `42P07 relation "sync_snapshot" already exists` en la segunda llamada.
+- Causa: el arnés ejecuta cuatro RPC dentro de una sola transacción para revertir fixtures; `ON COMMIT DROP` conserva la tabla temporal hasta el `ROLLBACK`. En producción cada petición/RPC usa una transacción independiente.
+- Corrección: el arnés elimina `pg_temp.sync_snapshot` entre llamadas. La función instalada y los datos reales no se modificaron.
+- Seguridad: el error abortó la transacción inicial, por lo que no quedaron fixtures.
+
 ### 2B — reconciliación transaccional
 
 - [x] Redactar migración y RPC atómica (`20260907230000_atomic_library_sync.sql`).

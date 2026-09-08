@@ -54,6 +54,7 @@ begin
   if v_summary->>'new' <> '6' or v_summary->>'lessons' <> '1' or v_summary->>'unsupported' <> '1' then
     raise exception 'Unexpected first synchronization summary: %', v_summary;
   end if;
+  drop table if exists pg_temp.sync_snapshot;
 
   select course.id into strict v_course_id
   from public.courses course
@@ -75,6 +76,7 @@ begin
   values (v_source_id, 'running', v_admin_id)
   returning id into v_run_id;
   v_summary := public.reconcile_library_snapshot(v_source_id, v_run_id, v_snapshot_initial);
+  drop table if exists pg_temp.sync_snapshot;
 
   if v_summary->>'new' <> '0' or v_summary->>'updated' <> '0' or v_summary->>'missing' <> '0' then
     raise exception 'The identical snapshot was not idempotent: %', v_summary;
@@ -97,6 +99,7 @@ begin
   values (v_source_id, 'running', v_admin_id)
   returning id into v_run_id;
   v_summary := public.reconcile_library_snapshot(v_source_id, v_run_id, v_snapshot_changed);
+  drop table if exists pg_temp.sync_snapshot;
 
   if v_summary->>'missing' <> '1' then
     raise exception 'The omitted lesson was not marked missing: %', v_summary;
@@ -120,6 +123,7 @@ begin
   values (v_source_id, 'running', v_admin_id)
   returning id into v_run_id;
   v_summary := public.reconcile_library_snapshot(v_source_id, v_run_id, v_snapshot_initial);
+  drop table if exists pg_temp.sync_snapshot;
 
   if v_summary->>'restored' <> '1' or v_summary->>'missing' <> '0' then
     raise exception 'The lesson was not restored correctly: %', v_summary;
