@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { AppHeader } from "@/components/app-header";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type AccessProfile = {
@@ -69,18 +70,18 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-slate-100">
-      <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-3xl border border-slate-800 bg-slate-900/70 p-8 shadow-2xl shadow-black/20 sm:p-12">
-        <p className="text-sm font-semibold tracking-[0.2em] text-sky-300 uppercase">
-          Biblioteca personal
-        </p>
+    <div className="app-shell">
+      <AppHeader admin={view.kind === "authorized" && view.profile.role === "admin"} email={view.kind === "authorized" ? view.profile.email : undefined} />
+      <main className="page-width py-16">
+      <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-3xl border p-8 sm:p-12" style={{ background: "var(--bg-elevated)", borderColor: "var(--line)", boxShadow: "var(--shadow)" }}>
+        <p className="eyebrow">Mi cuenta</p>
 
-        {view.kind === "loading" ? <p className="text-slate-300">Comprobando autorización…</p> : null}
+        {view.kind === "loading" ? <p className="muted">Comprobando autorización…</p> : null}
 
         {view.kind === "signed-out" ? (
           <>
             <h1 className="text-3xl font-semibold">Necesitas iniciar sesión.</h1>
-            <a className="w-fit rounded-xl bg-white px-5 py-3 font-semibold text-slate-950" href="/signin">
+            <a className="primary-button w-fit" href="/signin">
               Ir al acceso
             </a>
           </>
@@ -89,10 +90,10 @@ export default function DashboardPage() {
         {view.kind === "denied" ? (
           <>
             <h1 className="text-3xl font-semibold">Acceso no autorizado</h1>
-            <p className="text-slate-300">
+            <p className="muted">
               La cuenta {view.email} inició sesión correctamente, pero todavía no está en la lista de acceso.
             </p>
-            <button className="w-fit rounded-xl border border-slate-500 px-4 py-2" onClick={() => void signOut()} type="button">
+            <button className="secondary-button w-fit" onClick={() => void signOut()} type="button">
               Cerrar sesión
             </button>
           </>
@@ -100,31 +101,32 @@ export default function DashboardPage() {
 
         {view.kind === "authorized" ? (
           <>
-            <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-6">
-              <p className="font-semibold text-emerald-200">Acceso autorizado</p>
-              <p className="mt-1 text-slate-100">{view.profile.email}</p>
-              <p className="mt-3 text-sm text-slate-300">
+            <div className="rounded-2xl border p-6" style={{ background: "var(--surface)", borderColor: "var(--line-strong)" }}>
+              <p className="font-semibold text-blue-500">Acceso autorizado</p>
+              <p className="mt-1">{view.profile.email}</p>
+              <p className="mt-3 text-sm muted">
                 Rol actual: {view.profile.role === "admin" ? "administrador" : "lector"}.
               </p>
             </div>
-            <p className="text-slate-300">Tu biblioteca está lista para usar.</p>
+            <p className="muted">Tu biblioteca está lista para usar.</p>
             <div className="flex flex-wrap gap-3">
-              <a className="w-fit rounded-xl bg-white px-4 py-2 font-semibold text-slate-950" href="/catalog">Abrir catálogo</a>
-              {view.profile.role === "admin" ? <a className="w-fit rounded-xl border border-slate-500 px-4 py-2" href="/admin">Administrar catálogo</a> : null}
+              <a className="primary-button w-fit" href="/catalog">Abrir catálogo</a>
+              {view.profile.role === "admin" ? <a className="secondary-button w-fit" href="/admin">Administrar catálogo</a> : null}
             </div>
-            <button className="w-fit rounded-xl border border-slate-500 px-4 py-2" onClick={() => void signOut()} type="button">
+            <button className="secondary-button w-fit" onClick={() => void signOut()} type="button">
               Cerrar sesión
             </button>
           </>
         ) : null}
 
         {view.kind === "error" ? (
-          <div className="rounded-2xl border border-rose-400/40 bg-rose-400/10 p-6">
-            <h1 className="font-semibold text-rose-100">No se pudo comprobar el acceso</h1>
-            <p className="mt-2 text-rose-100">{view.message}</p>
+          <div className="auth-message p-6">
+            <h1 className="font-semibold">No se pudo comprobar el acceso</h1>
+            <p className="mt-2">{view.message}</p>
           </div>
         ) : null}
       </section>
-    </main>
+      </main>
+    </div>
   );
 }

@@ -4,7 +4,25 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 
+import { Brand } from "@/components/brand";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+
+const ascii = String.raw`
+             .         *          .
+        *        ╭──────────╮             .
+   .          ╭─┤  LEARN   ├─╮       *
+       ╭──────┘ ╰──────────╯ └──────╮
+       │    +    +    +    +    +   │
+  *    │  +   ╭────────────╮  +     │   .
+       │    + │  01 10 01  │    +   │
+       │  +   │  PLAY  ▶   │ +      │
+   .   │    + ╰────────────╯    +   │
+       ╰────────────┬───────────────╯
+             .      │       *
+                  ──┴──                 .
+      *       YOUR NEXT CHAPTER
+`;
 
 export default function SignInPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -13,54 +31,67 @@ export default function SignInPage() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-
-    void supabase.auth.getUser().then(({ data, error }) => {
-      if (error) setMessage(error.message);
+    void supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
       setIsLoading(false);
     });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event, session) => setUser(session?.user ?? null),
-    );
-
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
     return () => subscription.subscription.unsubscribe();
   }, []);
 
   async function signInWithGoogle() {
     setMessage(null);
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
-
-    if (error) setMessage(error.message);
+    if (error) setMessage("Google no pudo iniciar la sesión. Inténtalo nuevamente.");
   }
 
   async function signOut() {
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signOut();
-    if (error) setMessage(error.message);
+    await createSupabaseBrowserClient().auth.signOut();
+    setUser(null);
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-slate-100">
-      <section className="mx-auto flex w-full max-w-3xl flex-col gap-10 rounded-3xl border border-slate-800 bg-slate-900/70 p-8 shadow-2xl shadow-black/20 sm:p-12">
-        <div className="space-y-4">
-          <p className="text-sm font-semibold tracking-[0.2em] text-sky-300 uppercase">Biblioteca personal</p>
-          <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">Aprende desde tu biblioteca de cursos.</h1>
-          <p className="max-w-xl text-lg leading-8 text-slate-300">Inicia sesión con una cuenta autorizada para acceder a tus cursos, progreso y notas privadas.</p>
+    <main className="login-page">
+      <section className="login-visual">
+        <Brand />
+        <pre aria-hidden="true" className="ascii-art">{ascii}</pre>
+        <div className="login-copy">
+          <p className="eyebrow">Tu biblioteca privada</p>
+          <h2 className="display-title">Aprende a tu ritmo.</h2>
+          <p>Cursos, avance y notas en un espacio diseñado para entrar, concentrarte y continuar exactamente donde estabas.</p>
         </div>
+        <p className="muted">Nébula · Un espacio, todo tu aprendizaje.</p>
+      </section>
 
-        {isLoading ? <p className="text-slate-300">Comprobando sesión…</p> : user ? (
-          <div className="flex flex-col gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-6">
-            <div><p className="font-semibold text-emerald-200">Sesión iniciada</p><p className="mt-1 text-slate-200">{user.email}</p></div>
-            <div className="flex flex-wrap gap-3"><Link className="w-fit rounded-xl bg-white px-4 py-2 font-semibold text-slate-950" href="/">Ir a mi biblioteca</Link><button className="w-fit rounded-xl border border-slate-500 px-4 py-2 font-medium transition hover:bg-slate-800" onClick={() => void signOut()} type="button">Cerrar sesión</button></div>
+      <section className="login-panel">
+        <div className="login-card">
+          <div className="flex items-center justify-between">
+            <p className="eyebrow">Acceso privado</p>
+            <ThemeToggle />
           </div>
-        ) : <button className="w-fit rounded-xl bg-white px-5 py-3 font-semibold text-slate-950 transition hover:bg-sky-100" onClick={() => void signInWithGoogle()} type="button">Iniciar sesión con Google</button>}
+          <h1>Bienvenido de vuelta</h1>
+          <p>Ingresa con una cuenta autorizada para abrir tu biblioteca.</p>
 
-        {message ? <p className="rounded-xl border border-rose-400/40 bg-rose-400/10 p-4 text-rose-100">{message}</p> : null}
+          {isLoading ? <p className="muted">Comprobando sesión…</p> : user ? (
+            <div className="auth-session">
+              <div><strong>Sesión activa</strong><p className="muted">{user.email}</p></div>
+              <Link className="primary-button" href="/">Abrir mi biblioteca <span aria-hidden="true">→</span></Link>
+              <button className="secondary-button" onClick={() => void signOut()} type="button">Cerrar sesión</button>
+            </div>
+          ) : (
+            <>
+              <button className="primary-button google-button" onClick={() => void signInWithGoogle()} type="button">
+                <span aria-hidden="true" className="google-mark">G</span>
+                Continuar con Google
+              </button>
+            </>
+          )}
+          {message ? <p className="auth-message" role="alert">{message}</p> : null}
+          <p className="mt-6 text-xs muted">Google es el único método de acceso. Solo las cuentas aprobadas pueden entrar.</p>
+        </div>
       </section>
     </main>
   );

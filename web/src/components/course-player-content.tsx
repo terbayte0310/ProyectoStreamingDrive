@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { AppHeader } from "@/components/app-header";
 import { LessonNotes } from "@/components/lesson-notes";
 import { buildCoursePlaybackQueue } from "@/lib/catalog/outline";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -176,6 +177,9 @@ export default function CoursePlayerContent() {
   }, [requestedLessonId, router]);
 
   const selected = lessons.find((lesson) => lesson.id === selectedId);
+  const selectedIndex = lessons.findIndex((lesson) => lesson.id === selectedId);
+  const previous = selectedIndex > 0 ? lessons[selectedIndex - 1] : undefined;
+  const next = selectedIndex >= 0 ? lessons[selectedIndex + 1] : undefined;
   const title = selected ? selected.custom_title ?? selected.detected_title : "";
   const returnTo = `/course-player?lesson=${requestedLessonId ?? ""}`;
 
@@ -252,82 +256,65 @@ export default function CoursePlayerContent() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
-      <section className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div>
-          <p className="text-sm font-semibold tracking-[.2em] text-sky-300 uppercase">Reproductor</p>
-          <h1 className="mt-2 text-2xl font-semibold">{title || "Preparando lección…"}</h1>
+    <div className="app-shell player-page">
+      <AppHeader />
+      <main className="player-layout">
+        <section className="player-stage">
+          <div className="player-titlebar">
+            <div><p className="eyebrow">Lección {selectedIndex >= 0 ? selectedIndex + 1 : "—"} de {lessons.length || "—"}</p><h1>{title || "Preparando lección…"}</h1></div>
+            <Link className="secondary-button" href="/catalog">Salir del aula</Link>
+          </div>
 
-          {state === "loading" ? <p className="mt-8">Preparando el reproductor…</p> : null}
-          {state === "needs-drive" ? (
-            <p className="mt-8">
-              Debes <Link className="text-sky-300 underline" href={`/drive-access?returnTo=${encodeURIComponent(returnTo)}`}>autorizar Drive</Link> para reproducir.
-            </p>
-          ) : null}
-          {state === "error" ? <p className="mt-8 text-rose-200">{error}</p> : null}
+          {state === "loading" ? <div className="status-card">Preparando una reproducción segura desde Drive…</div> : null}
+          {state === "needs-drive" ? <div className="status-card">Debes <Link className="font-semibold text-blue-500" href={`/drive-access?returnTo=${encodeURIComponent(returnTo)}`}>autorizar Drive</Link> para reproducir.</div> : null}
+          {state === "error" ? <div className="status-card text-rose-500">{error}</div> : null}
 
           {state === "ready" && fileId ? (
             <>
-              <video
-                autoPlay={shouldAutoplay}
-                className="mt-6 aspect-video w-full rounded-2xl bg-black"
-                controls
-                onEnded={() => void playNext()}
-                onLoadedMetadata={() => void restoreProgress()}
-                onPause={() => void saveCurrentPosition()}
-                onTimeUpdate={(event) => {
-                  const video = videoRef.current;
-                  const now = event.timeStamp;
-                  if (video && now - lastSavedAt.current >= 10_000) {
-                    lastSavedAt.current = now;
-                    void saveProgress(video.currentTime, video.duration);
-                  }
-                }}
-                preload="metadata"
-                ref={videoRef}
-                src={`/drive-stream/${fileId}`}
-              />
-              {courseComplete ? (
-                <div className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-                  <p className="font-semibold text-emerald-200">Curso completado</p>
-                  <Link className="mt-2 inline-block text-sky-300 underline" href="/catalog">Volver al catálogo</Link>
-                </div>
-              ) : null}
-              <div className="mt-4">
-                <button className="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60" disabled={downloading} onClick={() => void download()} type="button">
-                  {downloading ? "Preparando descarga…" : "Descargar en este dispositivo"}
-                </button>
-                {downloadError ? <p className="mt-2 text-sm text-rose-200">{downloadError}</p> : null}
-              </div>
-              {selectedId ? (
-                <LessonNotes
-                  lessonId={selectedId}
-                  readSecond={() => videoRef.current?.currentTime ?? 0}
-                  seekTo={(seconds) => {
-                    if (videoRef.current) videoRef.current.currentTime = seconds;
+              <div className="video-shell">
+                <video
+                  autoPlay={shouldAutoplay}
+                  controls
+                  onEnded={() => void playNext()}
+                  onLoadedMetadata={() => void restoreProgress()}
+                  onPause={() => void saveCurrentPosition()}
+                  onTimeUpdate={(event) => {
+                    const video = videoRef.current;
+                    if (video && event.timeStamp - lastSavedAt.current >= 10_000) {
+                      lastSavedAt.current = event.timeStamp;
+                      void saveProgress(video.currentTime, video.duration);
+                    }
                   }}
+                  playsInline
+                  preload="metadata"
+                  ref={videoRef}
+                  src={`/drive-stream/${fileId}`}
                 />
-              ) : null}
+              </div>
+              <div className="player-tools">
+                <button className="secondary-button" disabled={!previous} onClick={() => previous && void selectLesson(previous.id)} type="button">← Anterior</button>
+                <button className="primary-button" disabled={!next} onClick={() => next && void selectLesson(next.id)} type="button">Siguiente →</button>
+                <button className="secondary-button" disabled={downloading} onClick={() => void download()} type="button">{downloading ? "Preparando…" : "↓ Descargar"}</button>
+              </div>
+              {downloadError ? <p className="auth-message">{downloadError}</p> : null}
+              {courseComplete ? <div className="status-card"><strong>Curso completado</strong><p className="muted mt-1">Buen trabajo. Tu progreso quedó guardado.</p></div> : null}
+              {selectedId ? <LessonNotes lessonId={selectedId} readSecond={() => videoRef.current?.currentTime ?? 0} seekTo={(seconds) => { if (videoRef.current) videoRef.current.currentTime = seconds; }} /> : null}
             </>
           ) : null}
-        </div>
+        </section>
 
-        <aside className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-          <h2 className="font-semibold">Lecciones</h2>
-          <div className="mt-4 flex max-h-[70vh] flex-col gap-1 overflow-y-auto">
-            {lessons.map((lesson) => (
-              <button
-                className={`rounded-xl px-3 py-2 text-left text-sm ${lesson.id === selectedId ? "bg-sky-400/15 text-sky-100" : "text-slate-300 hover:bg-slate-800"}`}
-                key={lesson.id}
-                onClick={() => void selectLesson(lesson.id)}
-                type="button"
-              >
-                {lesson.custom_title ?? lesson.detected_title}
+        <aside className="player-sidebar">
+          <div className="sidebar-head"><h2>Contenido del curso</h2><p>{lessons.length} lecciones en orden</p></div>
+          <div className="lesson-list">
+            {lessons.map((lesson, index) => (
+              <button className={`lesson-button ${lesson.id === selectedId ? "lesson-button-active" : ""}`} key={lesson.id} onClick={() => void selectLesson(lesson.id)} type="button">
+                <span className="lesson-index">{String(index + 1).padStart(2, "0")}</span>
+                <span className="lesson-name">{lesson.custom_title ?? lesson.detected_title}</span>
               </button>
             ))}
           </div>
         </aside>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }

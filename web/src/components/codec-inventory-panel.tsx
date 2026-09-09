@@ -68,7 +68,7 @@ export function CodecInventoryPanel() {
   const probe = result?.probe;
 
   return (
-    <section className="mt-8 rounded-2xl border border-slate-700 bg-slate-900/70 p-5">
+    <section className="admin-panel admin-reveal mt-8 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">Códecs y tamaños</h2>

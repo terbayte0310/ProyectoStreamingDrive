@@ -1,9 +1,10 @@
+import Link from "next/link";
+
 import {
   AdminCourseManager,
   type AdminCourse,
-  type AdminLesson,
-  type AdminSection,
 } from "@/components/admin-course-manager";
+import { AppHeader } from "@/components/app-header";
 import { CatalogSyncPanel } from "@/components/catalog-sync-panel";
 import { CodecInventoryPanel } from "@/components/codec-inventory-panel";
 import { requireAdminAccess } from "@/lib/auth/access";
@@ -12,53 +13,47 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  await requireAdminAccess();
+  const access = await requireAdminAccess();
   const supabase = await createSupabaseServerClient();
-  const [coursesResult, sectionsResult, lessonsResult] = await Promise.all([
-    supabase
-      .from("courses")
-      .select("id, detected_title, custom_title, author, platform, published_on, description, cover_url, is_visible")
-      .order("position"),
-    supabase
-      .from("course_sections")
-      .select("id, course_id, parent_section_id, detected_title, custom_title, position, is_visible")
-      .eq("is_detected_section", true),
-    supabase
-      .from("lessons")
-      .select("id, course_id, section_id, detected_title, custom_title, position, is_visible"),
-  ]);
-  const error = coursesResult.error ?? sectionsResult.error ?? lessonsResult.error;
+  const coursesResult = await supabase
+    .from("courses")
+    .select("id, detected_title, custom_title, author, platform, published_on, description, cover_url, is_visible")
+    .order("position")
+    .order("id");
+  const error = coursesResult.error;
   const courses = (coursesResult.data ?? []) as AdminCourse[];
-  const lessons = (lessonsResult.data ?? []) as AdminLesson[];
-  const sections = (sectionsResult.data ?? []) as AdminSection[];
-  const catalogRevision = JSON.stringify([courses, lessons, sections]);
+  const visibleCourses = courses.filter((course) => course.is_visible).length;
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
-      <section className="mx-auto w-full max-w-6xl">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="admin-page app-shell">
+      <AppHeader email={access.profile.email} showNavigation={false} />
+      <main className="admin-main page-width">
+        <section className="admin-hero admin-reveal">
           <div>
-            <p className="text-sm font-semibold tracking-[.2em] text-sky-300 uppercase">Administración</p>
-            <h1 className="mt-2 text-3xl font-semibold">Catálogo</h1>
-            <p className="mt-2 text-slate-300">Los cambios solo afectan la aplicación; nunca modifican archivos de Drive.</p>
+            <p className="eyebrow">Control de biblioteca</p>
+            <h1>Tu catálogo, bajo control.</h1>
+            <p>Gestiona metadatos, orden y visibilidad desde una interfaz diseñada para que cada cambio se sienta claro y seguro.</p>
           </div>
-          <a className="rounded-xl border border-slate-600 px-4 py-2 font-medium hover:bg-slate-800" href="/catalog">Ver catálogo</a>
-        </div>
+          <div className="admin-hero-actions">
+            <div className="admin-stat"><strong>{courses.length}</strong><span>Cursos</span></div>
+            <div className="admin-stat"><strong>{visibleCourses}</strong><span>Publicados</span></div>
+            <div className="admin-stat"><strong>Por curso</strong><span>Carga bajo demanda</span></div>
+            <Link className="secondary-button" href="/catalog">Ver catálogo <span aria-hidden="true">↗</span></Link>
+          </div>
+        </section>
+
         {error ? (
-          <p className="mt-8 text-rose-200">No se pudo cargar el catálogo para editar.</p>
+          <p className="admin-alert admin-alert-error">No se pudo cargar el catálogo para editar.</p>
         ) : (
           <>
             <CatalogSyncPanel />
             <CodecInventoryPanel />
             <AdminCourseManager
               courses={courses}
-              key={catalogRevision}
-              lessons={lessons}
-              sections={sections}
             />
           </>
         )}
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
 
 export type AdminCourse = {
   author: string | null;
@@ -38,20 +38,44 @@ type OutlineItem = (AdminSection & { kind: "section" }) | (AdminLesson & { kind:
 
 export function AdminCourseManager({
   courses: initialCourses,
-  lessons: initialLessons,
-  sections: initialSections,
 }: {
   courses: AdminCourse[];
-  lessons: AdminLesson[];
-  sections: AdminSection[];
 }) {
   const [courses, setCourses] = useState(initialCourses);
-  const [lessons, setLessons] = useState(initialLessons);
-  const [sections, setSections] = useState(initialSections);
+  const [lessons, setLessons] = useState<AdminLesson[]>([]);
+  const [sections, setSections] = useState<AdminSection[]>([]);
   const [selectedId, setSelectedId] = useState(initialCourses[0]?.id ?? "");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [outlineError, setOutlineError] = useState("");
+  const [outlineLoading, setOutlineLoading] = useState(false);
   const selected = courses.find((course) => course.id === selectedId);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    async function loadOutline() {
+      setOutlineLoading(true);
+      setOutlineError("");
+      setLessons([]);
+      setSections([]);
+      try {
+        const response = await fetch(`/admin/courses/${selectedId}/outline`, { cache: "no-store" });
+        const result = (await response.json()) as { error?: string; lessons?: AdminLesson[]; sections?: AdminSection[] };
+        if (!response.ok || !result.lessons || !result.sections) throw new Error(result.error ?? "No se pudo cargar el contenido del curso.");
+        if (!cancelled) {
+          setLessons(result.lessons);
+          setSections(result.sections);
+        }
+      } catch (error) {
+        if (!cancelled) setOutlineError(error instanceof Error ? error.message : "No se pudo cargar el contenido del curso.");
+      } finally {
+        if (!cancelled) setOutlineLoading(false);
+      }
+    }
+    void loadOutline();
+    return () => { cancelled = true; };
+  }, [selectedId]);
 
   function siblings(parentSectionId: string | null): OutlineItem[] {
     const childSections = sections
@@ -151,16 +175,16 @@ export function AdminCourseManager({
   function renderGroup(parentSectionId: string | null, depth = 0): ReactNode {
     const group = siblings(parentSectionId);
     return group.map((item, index) => (
-      <div className={depth ? "ml-5 border-l border-slate-700 pl-3" : ""} key={`${item.kind}:${item.id}`}>
-        <div className="my-2 flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
+      <div className={depth ? "admin-outline-children ml-5 pl-3" : ""} key={`${item.kind}:${item.id}`}>
+        <div className="admin-outline-item my-2 flex flex-wrap items-center gap-2 p-3">
           <span className="w-16 text-xs font-semibold uppercase text-slate-400">{item.kind === "section" ? "Sección" : "Lección"}</span>
           <form className="flex min-w-0 flex-1 flex-wrap items-center gap-2" onSubmit={(event) => void saveOutlineItem(event, item)}>
-            <input aria-label={`Título de ${item.detected_title}`} className="min-w-48 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm" defaultValue={item.custom_title ?? ""} name="custom_title" placeholder={item.detected_title} />
+            <input aria-label={`Título de ${item.detected_title}`} className="admin-input min-w-48 flex-1 px-3 py-2 text-sm" defaultValue={item.custom_title ?? ""} name="custom_title" placeholder={item.detected_title} />
             <label className="flex items-center gap-1 text-xs"><input defaultChecked={item.is_visible} name="is_visible" type="checkbox" />Visible</label>
-            <button className="rounded-lg border border-slate-600 px-3 py-2 text-xs disabled:opacity-50" disabled={Boolean(busy)} type="submit">Guardar</button>
+            <button className="admin-small-button px-3 py-2 text-xs disabled:opacity-50" disabled={Boolean(busy)} type="submit">Guardar</button>
           </form>
-          <button aria-label="Subir" className="rounded-lg border border-slate-700 px-2 py-1 disabled:opacity-30" disabled={Boolean(busy) || index === 0} onClick={() => void move(item, -1)} type="button">↑</button>
-          <button aria-label="Bajar" className="rounded-lg border border-slate-700 px-2 py-1 disabled:opacity-30" disabled={Boolean(busy) || index === group.length - 1} onClick={() => void move(item, 1)} type="button">↓</button>
+          <button aria-label="Subir" className="admin-order-button px-2 py-1 disabled:opacity-30" disabled={Boolean(busy) || index === 0} onClick={() => void move(item, -1)} type="button">↑</button>
+          <button aria-label="Bajar" className="admin-order-button px-2 py-1 disabled:opacity-30" disabled={Boolean(busy) || index === group.length - 1} onClick={() => void move(item, 1)} type="button">↓</button>
         </div>
         {item.kind === "section" ? renderGroup(item.id, depth + 1) : null}
       </div>
@@ -168,12 +192,12 @@ export function AdminCourseManager({
   }
 
   return (
-    <div className="mt-8 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+    <div className="admin-manager admin-reveal mt-8 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <aside className="admin-panel admin-course-list p-3">
         <h2 className="px-2 pb-2 font-semibold">Cursos</h2>
         <div className="flex max-h-[65vh] flex-col gap-1 overflow-y-auto">
           {courses.map((course) => (
-            <button className={`rounded-xl px-3 py-3 text-left text-sm ${course.id === selectedId ? "bg-sky-400/15 text-sky-100" : "text-slate-300 hover:bg-slate-800"}`} key={course.id} onClick={() => { setSelectedId(course.id); setMessage(""); }} type="button">
+            <button className={`admin-course-option px-3 py-3 text-left text-sm ${course.id === selectedId ? "admin-course-option-active" : ""}`} key={course.id} onClick={() => { setSelectedId(course.id); setMessage(""); }} type="button">
               {course.custom_title ?? course.detected_title}
               {!course.is_visible ? <span className="ml-2 text-xs text-amber-300">Oculto</span> : null}
             </button>
@@ -183,25 +207,25 @@ export function AdminCourseManager({
 
       {selected ? (
         <div className="flex min-w-0 flex-col gap-6">
-          <form className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6" key={selected.id} onSubmit={saveCourse}>
+          <form className="admin-panel admin-course-form p-6" key={selected.id} onSubmit={saveCourse}>
             <h2 className="text-xl font-semibold">Datos del curso</h2>
             <p className="mt-1 text-sm text-slate-400">Detectado en Drive: {selected.detected_title}</p>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-sm">Título<input className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2" defaultValue={selected.custom_title ?? ""} name="custom_title" /></label>
-              <label className="flex flex-col gap-1 text-sm">Autor<input className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2" defaultValue={selected.author ?? ""} name="author" /></label>
-              <label className="flex flex-col gap-1 text-sm">Plataforma<input className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2" defaultValue={selected.platform ?? ""} name="platform" /></label>
-              <label className="flex flex-col gap-1 text-sm">Fecha<input className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2" defaultValue={selected.published_on ?? ""} name="published_on" placeholder="AAAA-MM-DD" /></label>
-              <label className="flex flex-col gap-1 text-sm sm:col-span-2">Portada (URL)<input className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2" defaultValue={selected.cover_url ?? ""} name="cover_url" type="url" /></label>
-              <label className="flex flex-col gap-1 text-sm sm:col-span-2">Descripción<textarea className="min-h-28 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2" defaultValue={selected.description ?? ""} name="description" /></label>
+              <label className="flex flex-col gap-1 text-sm">Título<input className="admin-input px-3 py-2" defaultValue={selected.custom_title ?? ""} name="custom_title" /></label>
+              <label className="flex flex-col gap-1 text-sm">Autor<input className="admin-input px-3 py-2" defaultValue={selected.author ?? ""} name="author" /></label>
+              <label className="flex flex-col gap-1 text-sm">Plataforma<input className="admin-input px-3 py-2" defaultValue={selected.platform ?? ""} name="platform" /></label>
+              <label className="flex flex-col gap-1 text-sm">Fecha<input className="admin-input px-3 py-2" defaultValue={selected.published_on ?? ""} name="published_on" placeholder="AAAA-MM-DD" /></label>
+              <label className="flex flex-col gap-1 text-sm sm:col-span-2">Portada (URL)<input className="admin-input px-3 py-2" defaultValue={selected.cover_url ?? ""} name="cover_url" type="url" /></label>
+              <label className="flex flex-col gap-1 text-sm sm:col-span-2">Descripción<textarea className="admin-input admin-textarea min-h-28 px-3 py-2" defaultValue={selected.description ?? ""} name="description" /></label>
               <label className="flex items-center gap-2 text-sm sm:col-span-2"><input defaultChecked={selected.is_visible} name="is_visible" type="checkbox" />Visible en el catálogo</label>
             </div>
-            <button className="mt-6 rounded-xl bg-white px-4 py-2 font-semibold text-slate-950 disabled:opacity-60" disabled={Boolean(busy)} type="submit">{busy === `course:${selected.id}` ? "Guardando…" : "Guardar curso"}</button>
+            <button className="primary-button mt-6 disabled:opacity-60" disabled={Boolean(busy)} type="submit">{busy === `course:${selected.id}` ? "Guardando…" : "Guardar curso"}</button>
           </form>
 
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <section className="admin-panel admin-outline-panel p-6">
             <h2 className="text-xl font-semibold">Secciones y lecciones</h2>
             <p className="mt-1 text-sm text-slate-400">Edita los nombres visibles y usa las flechas para ordenar elementos dentro de su sección.</p>
-            <div className="mt-4">{renderGroup(null)}</div>
+            <div className="mt-4">{outlineLoading ? <p className="text-sm text-slate-400">Cargando contenido del curso…</p> : outlineError ? <p className="text-rose-200">{outlineError}</p> : renderGroup(null)}</div>
           </section>
           {message ? <p className={message.includes("guardado") ? "text-emerald-300" : "text-rose-200"}>{message}</p> : null}
         </div>

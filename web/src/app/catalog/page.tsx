@@ -1,68 +1,66 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { buildCoursePlaybackQueue } from "@/lib/catalog/outline";
+import { AppHeader } from "@/components/app-header";
+import { CourseCover } from "@/components/course-cover";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-type Category = {
-  custom_title: string | null;
-  detected_title: string;
-  id: string;
-  position: number;
-};
-
-type Course = {
+type Profile = { email: string; is_authorized: boolean; role: "admin" | "reader" };
+type CatalogHomeRow = {
+  category_custom_title: string | null;
+  category_detected_title: string | null;
   category_id: string | null;
+  category_position: number | null;
+  completed_lesson_count: number;
+  course_author: string | null;
+  course_cover_url: string | null;
+  course_custom_title: string | null;
+  course_description: string | null;
+  course_detected_title: string;
+  course_id: string;
+  course_platform: string | null;
+  course_position: number;
+  first_lesson_id: string | null;
+  first_pending_lesson_id: string | null;
+  lesson_count: number;
+  resumable_lesson_id: string | null;
+  resumable_updated_at: string | null;
+  section_count: number;
+};
+type CourseView = {
+  category: string;
+  category_id: string | null;
+  completed: number;
+  cover_url: string | null;
   custom_title: string | null;
+  description: string | null;
+  destinationId: string | null;
   detected_title: string;
   id: string;
-  position: number;
+  lessonCount: number;
+  percent: number;
+  platform: string | null;
+  resumable: boolean;
+  resumableUpdatedAt: string | null;
+  sectionCount: number;
 };
 
-type Lesson = {
-  course_id: string;
-  custom_title: string | null;
-  detected_title: string;
-  id: string;
-  position: number;
-  section_id: string | null;
-};
+const titleOf = (item: { custom_title: string | null; detected_title: string }) => item.custom_title ?? item.detected_title;
 
-type SectionReference = {
-  course_id: string;
-  id: string;
-  parent_section_id: string | null;
-  position: number;
-};
-
-type Progress = {
-  lesson_id: string;
-  position_seconds: number;
-  state: "not_started" | "in_progress" | "completed";
-  updated_at: string;
-};
-
-type Profile = { is_authorized: boolean; role: "admin" | "reader" };
-
-function courseTitle(course: Course) {
-  return course.custom_title ?? course.detected_title;
-}
-
-function lessonTitle(lesson: Lesson) {
-  return lesson.custom_title ?? lesson.detected_title;
-}
-
-function ProgressBar({ percent }: { percent: number }) {
+function CourseCard({ course }: { course: CourseView }) {
   return (
-    <div
-      aria-label={`${percent}% completado`}
-      className="h-2 overflow-hidden rounded-full bg-slate-700"
-      role="progressbar"
-      aria-valuemax={100}
-      aria-valuemin={0}
-      aria-valuenow={percent}
-    >
-      <div className="h-full rounded-full bg-sky-400" style={{ width: `${percent}%` }} />
-    </div>
+    <article className="course-card">
+      <CourseCover category={course.category} coverUrl={course.cover_url} title={titleOf(course)} />
+      <div className="course-card-body">
+        <h3>{titleOf(course)}</h3>
+        <p className="course-card-meta">{course.sectionCount} secciones · {course.lessonCount} lecciones</p>
+        <div aria-label={`${course.percent}% completado`} className="progress-line" role="progressbar" aria-valuemax={100} aria-valuemin={0} aria-valuenow={course.percent}><span style={{ width: `${course.percent}%` }} /></div>
+        <div className="course-card-footer">
+          {course.destinationId ? <Link href={`/course-player?lesson=${course.destinationId}`}>{course.resumable ? "Continuar" : course.completed ? "Repasar" : "Empezar"} <span aria-hidden="true">→</span></Link> : <span className="muted text-xs">Sin vídeos</span>}
+          <span className="percentage">{course.percent}%</span>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -73,170 +71,70 @@ export default async function CatalogPage() {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/signin");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_authorized, role")
-    .eq("id", userData.user.id)
-    .maybeSingle<Profile>();
+  const { data: profile } = await supabase.from("profiles").select("email, is_authorized, role").eq("id", userData.user.id).maybeSingle<Profile>();
   if (!profile?.is_authorized) redirect("/dashboard");
 
-  const [categoriesResult, coursesResult, sectionsResult, lessonsResult, progressResult] =
-    await Promise.all([
-      supabase
-        .from("categories")
-        .select("id, detected_title, custom_title, position")
-        .eq("is_visible", true)
-        .order("position"),
-      supabase
-        .from("courses")
-        .select("id, category_id, detected_title, custom_title, position")
-        .eq("is_visible", true)
-        .order("position"),
-      supabase
-        .from("course_sections")
-        .select("id, course_id, parent_section_id, position")
-        .eq("is_detected_section", true)
-        .eq("is_visible", true),
-      supabase
-        .from("lessons")
-        .select("id, course_id, detected_title, custom_title, section_id, position")
-        .eq("is_visible", true)
-        .order("position"),
-      supabase
-        .from("lesson_progress")
-        .select("lesson_id, position_seconds, state, updated_at")
-        .eq("user_id", userData.user.id),
-    ]);
-
-  if (
-    categoriesResult.error ||
-    coursesResult.error ||
-    sectionsResult.error ||
-    lessonsResult.error ||
-    progressResult.error
-  ) {
-    return (
-      <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
-        <p>No se pudo cargar el catálogo todavía.</p>
-      </main>
-    );
+  const catalogResult = await supabase.rpc("get_catalog_home");
+  if (catalogResult.error) {
+    return <main className="app-shell grid min-h-screen place-items-center"><div className="status-card">No se pudo cargar el catálogo todavía.</div></main>;
   }
 
-  const categories = (categoriesResult.data ?? []) as Category[];
-  const courses = (coursesResult.data ?? []) as Course[];
-  const sections = (sectionsResult.data ?? []) as SectionReference[];
-  const lessons = (lessonsResult.data ?? []) as Lesson[];
-  const progressByLesson = new Map(
-    ((progressResult.data ?? []) as Progress[]).map((progress) => [progress.lesson_id, progress]),
-  );
+  const courseViews: CourseView[] = ((catalogResult.data ?? []) as CatalogHomeRow[]).map((course) => {
+    const completed = Number(course.completed_lesson_count);
+    const lessonCount = Number(course.lesson_count);
+    return {
+      category: course.category_custom_title ?? course.category_detected_title ?? "Biblioteca",
+      category_id: course.category_id,
+      completed,
+      cover_url: course.course_cover_url,
+      custom_title: course.course_custom_title,
+      description: course.course_description,
+      destinationId: course.resumable_lesson_id ?? course.first_pending_lesson_id ?? course.first_lesson_id,
+      detected_title: course.course_detected_title,
+      id: course.course_id,
+      lessonCount,
+      percent: lessonCount ? Math.round((completed / lessonCount) * 100) : 0,
+      platform: course.course_platform,
+      resumable: Boolean(course.resumable_lesson_id),
+      resumableUpdatedAt: course.resumable_updated_at,
+      sectionCount: Number(course.section_count),
+    };
+  });
 
-  function renderCourseCard(course: Course) {
-    const courseLessons = buildCoursePlaybackQueue(course.id, lessons, sections);
-    const sectionCount = sections.filter((section) => section.course_id === course.id).length;
-    const completedCount = courseLessons.filter(
-      (lesson) => progressByLesson.get(lesson.id)?.state === "completed",
-    ).length;
-    const percent = courseLessons.length
-      ? Math.round((completedCount / courseLessons.length) * 100)
-      : 0;
-    const resumableLesson = courseLessons
-      .map((lesson) => ({ lesson, progress: progressByLesson.get(lesson.id) }))
-      .filter(({ progress }) => progress?.state === "in_progress")
-      .sort(
-        (first, second) =>
-          new Date(second.progress!.updated_at).getTime() -
-          new Date(first.progress!.updated_at).getTime(),
-      )[0]?.lesson;
-    const firstUncompletedLesson = courseLessons.find(
-      (lesson) => progressByLesson.get(lesson.id)?.state !== "completed",
-    );
-    const destination = resumableLesson ?? firstUncompletedLesson ?? courseLessons[0];
-
-    return (
-      <article className="rounded-2xl border border-slate-700 bg-slate-900 p-5" key={course.id}>
-        <h3 className="text-xl font-semibold">{courseTitle(course)}</h3>
-        <p className="mt-2 text-sm text-slate-300">
-          {sectionCount} secciones · {courseLessons.length} lecciones
-        </p>
-
-        <div className="mt-5">
-          <div className="mb-2 flex items-baseline justify-between gap-3 text-sm">
-            <span className="font-medium text-slate-200">Tu avance</span>
-            <span className="text-sky-300">
-              {completedCount}/{courseLessons.length} · {percent}%
-            </span>
-          </div>
-          <ProgressBar percent={percent} />
-        </div>
-
-        {resumableLesson ? (
-          <p className="mt-4 text-sm text-slate-300">
-            Continúa: {lessonTitle(resumableLesson)}
-          </p>
-        ) : null}
-
-        {destination ? (
-          <a
-            className="mt-5 inline-flex rounded-xl bg-white px-4 py-2 font-semibold text-slate-950"
-            href={`/course-player?lesson=${destination.id}`}
-          >
-            {resumableLesson ? "Continuar viendo" : completedCount ? "Repasar curso" : "Empezar curso"}
-          </a>
-        ) : (
-          <p className="mt-5 text-sm text-slate-400">Este curso todavía no tiene videos disponibles.</p>
-        )}
-      </article>
-    );
-  }
-
-  const uncategorizedCourses = courses.filter((course) => !course.category_id);
+  const continueWatching = courseViews.filter((course) => course.resumable).sort((a, b) => (b.resumableUpdatedAt ?? "").localeCompare(a.resumableUpdatedAt ?? ""));
+  const featured = continueWatching[0] ?? courseViews[0];
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-slate-100">
-      <section className="mx-auto w-full max-w-5xl">
-        <p className="text-sm font-semibold tracking-[0.2em] text-sky-300 uppercase">
-          Biblioteca personal
-        </p>
-        <h1 className="mt-3 text-4xl font-semibold">Catálogo</h1>
-        <p className="mt-3 max-w-2xl text-slate-300">
-          Tu avance es privado. Se calcula a partir de las lecciones terminadas y se actualiza al
-          reproducir desde la aplicación.
-        </p>
+    <div className="app-shell">
+      <AppHeader admin={profile.role === "admin"} email={profile.email} />
+      <main className="catalog-main page-width">
+        {featured ? (
+          <section className="hero">
+            <div className="hero-copy">
+              <p className="eyebrow">{featured.resumable ? "Continúa aprendiendo" : "Selección de tu biblioteca"}</p>
+              <h1>{titleOf(featured)}</h1>
+              <p className="hero-description">{featured.description ?? `Retoma tu aprendizaje en ${featured.category}. Tu avance se guarda automáticamente mientras reproduces cada lección.`}</p>
+              <div className="hero-meta"><span className="meta-pill">{featured.category}</span><span className="meta-pill">{featured.lessonCount} lecciones</span><span className="meta-pill">{featured.percent}% completado</span>{featured.platform ? <span className="meta-pill">{featured.platform}</span> : null}</div>
+              <div className="hero-actions">{featured.destinationId ? <Link className="primary-button" href={`/course-player?lesson=${featured.destinationId}`}><span aria-hidden="true">▶</span> {featured.resumable ? "Continuar viendo" : "Comenzar curso"}</Link> : null}<a className="secondary-button" href="#biblioteca">Explorar biblioteca</a></div>
+            </div>
+            <div aria-hidden="true" className="hero-art"><CourseCover category={featured.category} coverUrl={featured.cover_url} title={titleOf(featured)} /></div>
+          </section>
+        ) : null}
 
-        <div className="mt-10 flex flex-col gap-10">
-          {categories.map((category) => {
-            const categoryCourses = courses.filter((course) => course.category_id === category.id);
+        {continueWatching.length ? (
+          <section className="section-block" id="continuar"><div className="section-heading"><div><h2>Continúa donde lo dejaste</h2><p>Tu progreso más reciente, listo para reproducir.</p></div></div><div className="course-rail">{continueWatching.map((course) => <CourseCard course={course} key={course.id} />)}</div></section>
+        ) : null}
+
+        <div id="biblioteca">
+          {Array.from(new Map(courseViews.filter((course) => course.category_id).map((course) => [course.category_id!, course.category])).entries()).map(([categoryId, categoryTitle]) => {
+            const categoryCourses = courseViews.filter((course) => course.category_id === categoryId);
             if (!categoryCourses.length) return null;
-
-            return (
-              <section key={category.id}>
-                <h2 className="text-2xl font-semibold">
-                  {category.custom_title ?? category.detected_title}
-                </h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  {categoryCourses.map(renderCourseCard)}
-                </div>
-              </section>
-            );
+            return <section className="section-block" key={categoryId}><div className="section-heading"><div><h2>{categoryTitle}</h2><p>{categoryCourses.length} {categoryCourses.length === 1 ? "curso" : "cursos"}</p></div></div><div className="course-rail">{categoryCourses.map((course) => <CourseCard course={course} key={course.id} />)}</div></section>;
           })}
-
-          {uncategorizedCourses.length ? (
-            <section>
-              <h2 className="text-2xl font-semibold">Sin categoría</h2>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                {uncategorizedCourses.map(renderCourseCard)}
-              </div>
-            </section>
-          ) : null}
-
-          {courses.length === 0 ? <p className="text-slate-300">Todavía no hay cursos importados.</p> : null}
+          {courseViews.some((course) => !course.category_id) ? <section className="section-block"><div className="section-heading"><div><h2>Más de tu biblioteca</h2></div></div><div className="course-rail">{courseViews.filter((course) => !course.category_id).map((course) => <CourseCard course={course} key={course.id} />)}</div></section> : null}
+          {!courseViews.length ? <div className="status-card">Todavía no hay cursos importados.</div> : null}
         </div>
-
-        <nav className="mt-10 flex flex-wrap gap-4 text-sky-300 underline">
-          <a href="/dashboard">Mi cuenta</a>
-          {profile.role === "admin" ? <a href="/admin">Administrar catálogo</a> : null}
-        </nav>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }

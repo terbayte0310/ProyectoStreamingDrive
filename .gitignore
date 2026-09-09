@@ -1,0 +1,10 @@
+# Local dependencies and generated audit artifacts.
+node_modules/
+outputs/media_inventory/
+AUDITORIA_PROYECTO.html
+web/supabase/.temp/
+
+# Credentials and local runtime files.
+.env
+.env.*
+*.log

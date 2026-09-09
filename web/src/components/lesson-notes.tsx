@@ -93,21 +93,21 @@ export function LessonNotes({ lessonId, readSecond, seekTo }: LessonNotesProps) 
   }
 
   return (
-    <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+    <section className="notes-panel">
       <h2 className="font-semibold">Notas</h2>
-      <p className="mt-1 text-sm text-slate-400">
+      <p className="mt-1 text-sm muted">
         La nota quedará enlazada al segundo actual del video.
       </p>
 
-      <form className="mt-4 flex gap-2" onSubmit={addNote}>
+      <form className="notes-form" onSubmit={addNote}>
         <input
-          className="min-w-0 flex-1 rounded-xl border border-slate-600 bg-slate-950 px-3 py-2"
+          className="notes-input"
           onChange={(event) => setBody(event.target.value)}
           placeholder="Añadir nota en el segundo actual…"
           value={body}
         />
         <button
-          className="rounded-xl bg-white px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
+          className="primary-button disabled:opacity-50"
           disabled={saving}
           type="submit"
         >
@@ -115,25 +115,25 @@ export function LessonNotes({ lessonId, readSecond, seekTo }: LessonNotesProps) 
         </button>
       </form>
 
-      {loadError && <p className="mt-3 text-sm text-rose-200">{loadError}</p>}
+      {loadError && <p className="mt-3 text-sm text-rose-500">{loadError}</p>}
 
       <div className="mt-4 flex flex-col gap-2">
         {notes.length ? (
           notes.map((note) => (
             <button
-              className="rounded-xl bg-slate-800 px-3 py-3 text-left text-sm hover:bg-slate-700"
+              className="note-item"
               key={note.id}
               onClick={() => seekTo(note.timestamp_seconds)}
               type="button"
             >
-              <span className="mr-2 font-semibold text-sky-300">
+              <span className="mr-2 font-semibold text-blue-500">
                 {formatTime(note.timestamp_seconds)}
               </span>
               {note.body}
             </button>
           ))
         ) : (
-          <p className="text-sm text-slate-400">Todavía no tienes notas en esta lección.</p>
+          <p className="text-sm muted">Todavía no tienes notas en esta lección.</p>
         )}
       </div>
     </section>
