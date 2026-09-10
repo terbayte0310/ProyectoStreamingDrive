@@ -72,8 +72,8 @@ export default function DashboardPage() {
   return (
     <div className="app-shell">
       <AppHeader admin={view.kind === "authorized" && view.profile.role === "admin"} email={view.kind === "authorized" ? view.profile.email : undefined} />
-      <main className="page-width py-16">
-      <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 rounded-3xl border p-8 sm:p-12" style={{ background: "var(--bg-elevated)", borderColor: "var(--line)", boxShadow: "var(--shadow)" }}>
+      <main className="account-page page-width">
+      <section className="account-panel">
         <p className="eyebrow">Mi cuenta</p>
 
         {view.kind === "loading" ? <p className="muted">Comprobando autorización…</p> : null}
@@ -101,7 +101,7 @@ export default function DashboardPage() {
 
         {view.kind === "authorized" ? (
           <>
-            <div className="rounded-2xl border p-6" style={{ background: "var(--surface)", borderColor: "var(--line-strong)" }}>
+            <div className="account-authorized">
               <p className="font-semibold text-blue-500">Acceso autorizado</p>
               <p className="mt-1">{view.profile.email}</p>
               <p className="mt-3 text-sm muted">

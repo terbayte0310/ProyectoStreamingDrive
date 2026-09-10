@@ -307,3 +307,129 @@ button { cursor: pointer; }
   .admin-hero-actions { grid-template-columns: repeat(3, 1fr); width: 100%; }
   .admin-stat { padding: .7rem; }
 }
+
+/* Refined motion system --------------------------------------------------- */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-press: 160ms;
+  --duration-ui: 220ms;
+}
+
+body { transition: none; }
+
+/* Navigation is used constantly: selection is immediate, not ornamental. */
+.main-nav { overflow: visible; }
+.nav-indicator { display: none; }
+.nav-link { transition: none; }
+.nav-link-active { color: white; background: linear-gradient(135deg, var(--blue), var(--blue-bright)); }
+
+/* A compact, shared physical response for intentional presses. */
+.primary-button, .secondary-button, .icon-button, .profile-chip,
+.admin-page button:not(.icon-button) {
+  transition: transform var(--duration-press) var(--ease-out);
+  will-change: auto;
+}
+.primary-button:active, .secondary-button:active, .icon-button:active, .profile-chip:active,
+.admin-page button:not(.icon-button):not(:disabled):active {
+  transform: scale(.97);
+}
+
+.course-card {
+  transition: transform var(--duration-ui) var(--ease-out);
+}
+.lesson-button, .admin-course-option, .admin-outline-item, .admin-stat,
+.admin-panel, .admin-page li, .admin-page details {
+  transition: transform var(--duration-press) var(--ease-out);
+}
+.progress-line span { transition: none; }
+
+/* Entrances explain a new page; repeated rails and form swaps stay instant. */
+.login-card, .hero-copy, .hero-art { animation: rise-in 240ms var(--ease-out) both; }
+.hero-art { animation-delay: 50ms; }
+.section-block, .admin-course-form, .admin-outline-panel { animation: none; }
+.admin-reveal { animation: rise-in 240ms var(--ease-out) both; }
+.admin-panel.admin-reveal:nth-of-type(3) { animation-delay: 50ms; }
+.admin-alert { animation: rise-in 220ms var(--ease-out) both; }
+
+/* The operational and diagnostic routes inherit the product's visual system. */
+main[class~="bg-slate-950"] {
+  background: radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--blue-bright) 12%, transparent), transparent 28rem), var(--bg) !important;
+  color: var(--text) !important;
+}
+main[class~="bg-slate-950"] > section[class*="bg-slate"] {
+  border-color: var(--line) !important;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent) !important;
+  box-shadow: var(--shadow-small);
+}
+main[class~="bg-slate-950"] .text-slate-100,
+main[class~="bg-slate-950"] .text-slate-200,
+main[class~="bg-slate-950"] .text-slate-300 { color: var(--text) !important; }
+main[class~="bg-slate-950"] .text-slate-400 { color: var(--text-soft) !important; }
+main[class~="bg-slate-950"] .text-sky-300 { color: var(--blue) !important; }
+main[class~="bg-slate-950"] .bg-white {
+  color: white !important;
+  background: linear-gradient(135deg, var(--blue), var(--blue-bright)) !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--blue) 24%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brand:hover .brand-mark { animation: none; transform: rotate(0deg) scale(1.02); }
+  .nav-link:hover { color: var(--text); transform: translateY(-1px); }
+  .icon-button:hover, .profile-chip:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+  .primary-button:hover, .secondary-button:hover { transform: translateY(-2px); }
+  .course-card:hover { transform: translateY(-4px) scale(1.008); }
+  .lesson-button:hover { transform: translateX(2px); }
+  .header-admin:hover { transform: translateY(-1px); }
+  .admin-stat:hover, .admin-page button:not(.icon-button):not(:disabled):hover { transform: translateY(-2px); }
+  .admin-course-option:hover, .admin-outline-item:hover { transform: translateX(3px); }
+  .admin-page li:hover { transform: translateX(2px); }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .brand:hover .brand-mark, .nav-link:hover, .icon-button:hover, .profile-chip:hover,
+  .primary-button:hover, .secondary-button:hover, .course-card:hover, .lesson-button:hover,
+  .header-admin:hover, .admin-stat:hover, .admin-page button:not(.icon-button):not(:disabled):hover,
+  .admin-course-option:hover, .admin-outline-item:hover, .admin-page li:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-visual::before, .ascii-art, .brand:hover .brand-mark { animation: none; }
+  .login-card, .hero-copy, .hero-art, .admin-reveal, .admin-alert {
+    animation-name: fade-in;
+    animation-duration: 160ms;
+  }
+  .course-card:focus-within { transform: none; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Account states use the same calm, focused surface as the main catalogue. */
+.account-page { padding-block: clamp(3rem, 9vw, 7rem); }
+.account-panel {
+  display: flex;
+  width: min(100%, 48rem);
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-inline: auto;
+  padding: clamp(2rem, 5vw, 3.5rem);
+  border: 1px solid var(--line);
+  border-radius: 2rem;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: var(--shadow);
+  animation: rise-in 240ms var(--ease-out) both;
+}
+.account-authorized {
+  padding: 1.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue-soft) 78%, var(--bg-solid)), var(--bg-solid));
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-panel { animation-name: fade-in; animation-duration: 160ms; }
+}
