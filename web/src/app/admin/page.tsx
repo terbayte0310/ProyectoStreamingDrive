@@ -18,6 +18,7 @@ export default async function AdminPage() {
   const coursesResult = await supabase
     .from("courses")
     .select("id, detected_title, custom_title, author, platform, published_on, description, cover_url, is_visible")
+    .eq("is_detected_course", true)
     .order("position")
     .order("id");
   const error = coursesResult.error;

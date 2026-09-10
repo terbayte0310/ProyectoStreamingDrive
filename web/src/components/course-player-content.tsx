@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
+import { CourseResources } from "@/components/course-resources";
 import { LessonNotes } from "@/components/lesson-notes";
 import { buildCoursePlaybackQueue } from "@/lib/catalog/outline";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -298,6 +299,7 @@ export default function CoursePlayerContent() {
               </div>
               {downloadError ? <p className="auth-message">{downloadError}</p> : null}
               {courseComplete ? <div className="status-card"><strong>Curso completado</strong><p className="muted mt-1">Buen trabajo. Tu progreso quedó guardado.</p></div> : null}
+              {selected ? <CourseResources courseId={selected.course_id} /> : null}
               {selectedId ? <LessonNotes lessonId={selectedId} readSecond={() => videoRef.current?.currentTime ?? 0} seekTo={(seconds) => { if (videoRef.current) videoRef.current.currentTime = seconds; }} /> : null}
             </>
           ) : null}

@@ -1,6 +1,6 @@
 import { normalizeDetectedTitle } from "./title-normalization.ts";
 
-const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+export const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const ignoredNames = new Set(["desktop.ini", ".ds_store", "thumbs.db"]);
 const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
@@ -80,15 +80,24 @@ export type LibrarySnapshotIssue = {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 type ListChildren = (parentId: string) => Promise<DriveFile[]>;
 
+export class DriveApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 function sortNaturally(files: DriveFile[]) {
   return [...files].sort((first, second) => naturalOrder.compare(first.name, second.name));
 }
 
-function isIgnored(file: DriveFile) {
+export function isIgnoredDriveFile(file: DriveFile) {
   return ignoredNames.has(file.name.toLowerCase()) || file.name.startsWith(".");
 }
 
-function isPlayable(file: DriveFile) {
+export function isPlayableDriveFile(file: DriveFile) {
   return file.mimeType.startsWith("video/") || file.mimeType.startsWith("audio/");
 }
 
@@ -112,7 +121,7 @@ export async function listDriveChildren(
     const response = await fetchRequest(`https://www.googleapis.com/drive/v3/files?${query}`, {
       headers: { authorization: `Bearer ${accessToken}` },
     });
-    if (!response.ok) throw new Error(`Drive rechazó la lectura de la carpeta ${parentId}.`);
+    if (!response.ok) throw new DriveApiError(`Drive rechazó la lectura de la carpeta ${parentId}.`, response.status);
 
     const data = (await response.json()) as DriveListResponse;
     files.push(...(data.files ?? []));
@@ -122,7 +131,7 @@ export async function listDriveChildren(
   return sortNaturally(files);
 }
 
-function toSnapshotItem({
+export function createSnapshotItem({
   categoryDriveFileId,
   courseDriveFileId,
   file,
@@ -216,7 +225,7 @@ export async function scanDriveLibrary({
     courseDriveFileId: string | null,
     parentSectionDriveFileId: string | null,
   ) {
-    items.push(toSnapshotItem({
+    items.push(createSnapshotItem({
       categoryDriveFileId,
       courseDriveFileId,
       file,
@@ -244,12 +253,12 @@ export async function scanDriveLibrary({
     const children = await readFolder(folderId);
     for (let position = 0; position < children.length; position += 1) {
       const child = children[position];
-      if (isIgnored(child)) {
+      if (isIgnoredDriveFile(child)) {
         append(child, "ignored", position, folderId, categoryDriveFileId, courseDriveFileId, parentSectionDriveFileId);
       } else if (child.mimeType === FOLDER_MIME_TYPE) {
         append(child, "section", position, folderId, categoryDriveFileId, courseDriveFileId, parentSectionDriveFileId);
         await scanCourseFolder(child.id, categoryDriveFileId, courseDriveFileId, child.id);
-      } else if (isPlayable(child)) {
+      } else if (isPlayableDriveFile(child)) {
         append(child, "lesson", position, folderId, categoryDriveFileId, courseDriveFileId, parentSectionDriveFileId);
       } else {
         append(child, "unsupported", position, folderId, categoryDriveFileId, courseDriveFileId, parentSectionDriveFileId);
@@ -263,7 +272,7 @@ export async function scanDriveLibrary({
 
   for (let categoryPosition = 0; categoryPosition < rootChildren.length; categoryPosition += 1) {
     const category = rootChildren[categoryPosition];
-    if (isIgnored(category)) {
+    if (isIgnoredDriveFile(category)) {
       append(category, "ignored", categoryPosition, rootFolderId, null, null, null);
       continue;
     }
@@ -276,7 +285,7 @@ export async function scanDriveLibrary({
     const categoryChildren = await readFolder(category.id);
     for (let coursePosition = 0; coursePosition < categoryChildren.length; coursePosition += 1) {
       const course = categoryChildren[coursePosition];
-      if (isIgnored(course)) {
+      if (isIgnoredDriveFile(course)) {
         append(course, "ignored", coursePosition, category.id, category.id, null, null);
       } else if (course.mimeType !== FOLDER_MIME_TYPE) {
         append(course, "conflict", coursePosition, category.id, category.id, null, null);

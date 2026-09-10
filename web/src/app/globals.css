@@ -292,6 +292,17 @@ button { cursor: pointer; }
 .admin-reveal { animation: rise-in 600ms cubic-bezier(.2,.8,.2,1) both; }
 .admin-panel.admin-reveal:nth-of-type(3) { animation-delay: 80ms; }
 
+/* Download-only course resources ----------------------------------------- */
+.course-resources { margin-top: 1.25rem; padding: 1.15rem; border: 1px solid var(--line); border-radius: 1.1rem; background: var(--surface); }
+.course-resources .sidebar-head { margin-bottom: .85rem; }
+.resource-group + .resource-group { margin-top: 1rem; }
+.resource-group h3 { margin: 0 0 .45rem; color: var(--text-soft); font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.resource-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 0; border-top: 1px solid var(--line); }
+.resource-row strong, .resource-row span { display: block; }
+.resource-row strong { overflow-wrap: anywhere; font-size: .9rem; }
+.resource-row span { margin-top: .16rem; color: var(--text-soft); font-size: .75rem; }
+.resource-row .secondary-button { flex: 0 0 auto; padding: .45rem .7rem; font-size: .8rem; }
+
 @keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes brand-wiggle { 50% { transform: rotate(7deg) scale(1.08); } }
 
