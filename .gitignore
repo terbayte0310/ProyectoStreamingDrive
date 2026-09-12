@@ -2,6 +2,7 @@
 node_modules/
 outputs/media_inventory/
 AUDITORIA_PROYECTO.html
+docs/entregables/
 web/supabase/.temp/
 
 # Credentials and local runtime files.
