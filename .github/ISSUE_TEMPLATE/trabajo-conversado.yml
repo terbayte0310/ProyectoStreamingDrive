@@ -1,0 +1,116 @@
+name: Paso conversado
+description: Definir y ejecutar un paso solo después de resolver sus decisiones y riesgos.
+title: "[ÁREA] "
+labels:
+  - needs-discussion
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Este repositorio es público. No incluyas tokens, credenciales, correos, rutas personales, IDs reales de Drive ni listados privados de contenido.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Tipo de paso
+      options:
+        - Decisión
+        - Implementación
+        - Corrección
+        - Operación
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Resultado esperado
+      description: Explica qué resultado observable debe producir este paso.
+      placeholder: Al terminar, podremos...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto y dependencias
+      description: Indica qué decisiones previas condicionan este paso y qué trabajo posterior puede afectar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: questions
+    attributes:
+      label: Preguntas que debemos resolver antes de implementar
+      description: Incluye alternativas, ventajas, riesgos y costes cuando sea relevante.
+    validations:
+      required: true
+
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Decisiones aprobadas
+      description: Se completa o actualiza después de la conversación. Una decisión debe quedar explícita antes de implementar.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Alcance incluido
+      description: Enumera los cambios autorizados dentro de este paso.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Fuera de alcance
+      description: Aclara qué no debe cambiarse todavía.
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Riesgos e impacto en pasos posteriores
+      description: Señala seguridad, costes, compatibilidad, migraciones y decisiones difíciles de revertir.
+    validations:
+      required: true
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: Plan técnico aprobado
+      description: Completar después de resolver las preguntas; no hace falta inventarlo al abrir el issue.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterios de aceptación
+      description: Condiciones verificables necesarias para cerrar el issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Pruebas y evidencias
+      description: Indica cómo se comprobará el resultado sin publicar datos privados.
+    validations:
+      required: true
+
+  - type: textarea
+    id: next_step
+    attributes:
+      label: Siguiente paso previsto
+      description: Qué issue podrá definirse cuando este quede cerrado.
+
+  - type: checkboxes
+    id: safeguards
+    attributes:
+      label: Confirmaciones
+      options:
+        - label: Confirmé que este issue no contiene secretos ni información privada.
+          required: true
+        - label: Las preguntas pendientes se resolverán antes de iniciar la implementación.
+          required: true
+
