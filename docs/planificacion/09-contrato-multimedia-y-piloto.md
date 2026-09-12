@@ -1,6 +1,6 @@
 # Contrato multimedia y piloto controlado
 
-**Estado:** aprobado para el piloto del Issue #3.  
+**Estado:** aprobado para el piloto del Issue #3.
 **Ámbito:** películas y series nuevas. No modifica la biblioteca de cursos, no autoriza conversiones o cargas masivas y no contiene títulos, rutas, IDs ni enlaces privados.
 
 ## Objetivo
