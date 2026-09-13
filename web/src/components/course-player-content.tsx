@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { CourseResources } from "@/components/course-resources";
 import { LessonNotes } from "@/components/lesson-notes";
+import { completeSignOut } from "@/lib/auth/sign-out-client";
 import { buildCoursePlaybackQueue } from "@/lib/catalog/outline";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -182,8 +183,6 @@ export default function CoursePlayerContent() {
   const previous = selectedIndex > 0 ? lessons[selectedIndex - 1] : undefined;
   const next = selectedIndex >= 0 ? lessons[selectedIndex + 1] : undefined;
   const title = selected ? selected.custom_title ?? selected.detected_title : "";
-  const returnTo = `/course-player?lesson=${requestedLessonId ?? ""}`;
-
   async function saveProgress(seconds: number, duration: number, completed = false) {
     if (!selectedId || !userId || !Number.isFinite(duration)) return;
     await createSupabaseBrowserClient().from("lesson_progress").upsert({
@@ -267,7 +266,14 @@ export default function CoursePlayerContent() {
           </div>
 
           {state === "loading" ? <div className="status-card">Preparando una reproducción segura desde Drive…</div> : null}
-          {state === "needs-drive" ? <div className="status-card">Debes <Link className="font-semibold text-blue-500" href={`/drive-access?returnTo=${encodeURIComponent(returnTo)}`}>autorizar Drive</Link> para reproducir.</div> : null}
+          {state === "needs-drive" ? (
+            <div className="status-card">
+              <p>Esta sesión se creó antes de habilitar el acceso integrado a Drive.</p>
+              <button className="secondary-button mt-4" onClick={() => void completeSignOut()} type="button">
+                Volver a iniciar sesión
+              </button>
+            </div>
+          ) : null}
           {state === "error" ? <div className="status-card text-rose-500">{error}</div> : null}
 
           {state === "ready" && fileId ? (
