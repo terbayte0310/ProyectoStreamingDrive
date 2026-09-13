@@ -32,15 +32,34 @@ export default function SignInPage() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      setIsLoading(false);
+      setMessage("La comprobación de sesión tardó demasiado. Revisa la conexión y recarga la página.");
+    }, 8_000);
     void supabase.auth.getUser()
       .then(({ data, error }) => {
+        window.clearTimeout(timeout);
         setUser(data.user);
         if (error) setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
       })
-      .catch(() => setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo."))
-      .finally(() => setIsLoading(false));
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-    return () => subscription.subscription.unsubscribe();
+      .catch(() => {
+        window.clearTimeout(timeout);
+        setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
+      })
+      .finally(() => {
+        if (!timedOut) setIsLoading(false);
+      });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.clearTimeout(timeout);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+    return () => {
+      window.clearTimeout(timeout);
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
