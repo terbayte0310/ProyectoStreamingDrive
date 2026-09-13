@@ -2,7 +2,7 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-const workerUrl = "/sw.js?revision=logout-v2";
+const workerUrl = "/sw.js?revision=budget-v1";
 const channelName = "nebula-session";
 const storageKey = "nebula-session-sign-out";
 

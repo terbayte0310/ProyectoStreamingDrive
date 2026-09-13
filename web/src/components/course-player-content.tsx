@@ -29,7 +29,7 @@ type Section = {
 };
 
 type PlayerState = "error" | "loading" | "needs-drive" | "ready";
-const workerRevision = "logout-v2";
+const workerRevision = "budget-v1";
 
 async function getDriveWorker() {
   const registration = await navigator.serviceWorker.register(

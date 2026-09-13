@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { SessionSignOutCoordinator } from "@/components/session-sign-out-coordinator";
+import { TransferUsageNotice } from "@/components/transfer-usage-notice";
 
 export const metadata: Metadata = {
   title: { default: "Nébula", template: "%s · Nébula" },
@@ -18,7 +19,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col"><SessionSignOutCoordinator />{children}</body>
+      <body className="min-h-full flex flex-col"><SessionSignOutCoordinator /><TransferUsageNotice />{children}</body>
     </html>
   );
 }

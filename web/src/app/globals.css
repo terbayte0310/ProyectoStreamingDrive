@@ -173,6 +173,10 @@ button { cursor: pointer; }
 .lesson-name { font-size: .78rem; line-height: 1.4; }
 .player-tools { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
 .status-card { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--bg-elevated); color: var(--text-soft); }
+.transfer-usage-notice { position: fixed; z-index: 80; right: 1rem; bottom: 1rem; display: flex; width: min(28rem, calc(100vw - 2rem)); align-items: flex-start; gap: .75rem; padding: .9rem 1rem; border: 1px solid color-mix(in srgb, #d99800 35%, var(--line)); border-radius: 1rem; background: color-mix(in srgb, #fff4c2 92%, var(--bg-elevated)); color: #705000; box-shadow: 0 16px 40px rgba(16, 30, 54, .16); font-size: .86rem; line-height: 1.45; }
+.transfer-usage-notice p { flex: 1; }
+.transfer-usage-notice button { padding: 0 .2rem; border: 0; background: transparent; color: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.transfer-usage-notice-error { border-color: color-mix(in srgb, #e93863 35%, var(--line)); background: color-mix(in srgb, #fff0f3 92%, var(--bg-elevated)); color: #9f1839; }
 .notes-panel { margin-top: 1rem; padding: 1.1rem; border: 1px solid var(--line); border-radius: 1.2rem; background: var(--bg-elevated); box-shadow: var(--shadow-small); }
 .notes-panel h2 { margin: 0; }
 .notes-form { display: flex; gap: .5rem; margin-top: 1rem; }
