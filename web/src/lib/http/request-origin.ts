@@ -48,7 +48,13 @@ export function getRequestOrigin(
   environment = process.env.NODE_ENV,
 ) {
   const fallback = request.nextUrl.origin;
-  if (environment !== "development" || request.nextUrl.hostname !== "0.0.0.0") return fallback;
+  const isAllInterfacesBind = request.nextUrl.hostname === "0.0.0.0";
+  const isLocalDevelopmentOrigin = environment === "development"
+    && isPrivateDevelopmentHost(request.nextUrl.hostname);
+  if (
+    !isAllInterfacesBind
+    && !isLocalDevelopmentOrigin
+  ) return fallback;
 
   return developmentRequestOrigin(request.headers.get("host"), request.nextUrl.port) ?? fallback;
 }
