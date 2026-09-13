@@ -197,7 +197,7 @@ export function AdminCourseManager({
         <h2 className="px-2 pb-2 font-semibold">Cursos</h2>
         <div className="flex max-h-[65vh] flex-col gap-1 overflow-y-auto">
           {courses.map((course) => (
-            <button className={`admin-course-option px-3 py-3 text-left text-sm ${course.id === selectedId ? "admin-course-option-active" : ""}`} key={course.id} onClick={() => { setSelectedId(course.id); setMessage(""); }} type="button">
+            <button aria-current={course.id === selectedId ? "true" : undefined} className={`admin-course-option px-3 py-3 text-left text-sm ${course.id === selectedId ? "admin-course-option-active" : ""}`} key={course.id} onClick={() => { setSelectedId(course.id); setMessage(""); }} type="button">
               {course.custom_title ?? course.detected_title}
               {!course.is_visible ? <span className="ml-2 text-xs text-amber-300">Oculto</span> : null}
             </button>
