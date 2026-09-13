@@ -57,7 +57,7 @@ begin
 
   begin
     insert into public.series_seasons (series_id, internal_code, admin_title, season_number)
-    values (v_series_published_id, 'SER-90001-S99', 'Duplicate season number', 1);
+    values (v_series_published_id, 'SER-90001-S01', 'Duplicate season number', 1);
     raise exception 'Duplicate season number was accepted';
   exception when unique_violation then
     null;
