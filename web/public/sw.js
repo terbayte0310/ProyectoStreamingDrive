@@ -1,19 +1,34 @@
 let driveAccessToken = null;
 let refreshPromise = null;
+let driveSessionVersion = 0;
+let driveAccessInvalidated = false;
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "drive-access-token" && typeof event.data.token === "string") {
-    driveAccessToken = event.data.token;
-    event.ports[0]?.postMessage({ accepted: true });
+    if (driveAccessInvalidated) {
+      void refreshAccessToken().then((token) => event.ports[0]?.postMessage({ accepted: Boolean(token) }));
+    } else {
+      driveAccessToken = event.data.token;
+      event.ports[0]?.postMessage({ accepted: true });
+    }
+  }
+  if (event.data?.type === "clear-drive-access-token") {
+    driveSessionVersion += 1;
+    driveAccessToken = null;
+    driveAccessInvalidated = true;
+    refreshPromise = null;
+    event.ports[0]?.postMessage({ cleared: true });
   }
 });
 
 async function refreshAccessToken() {
-  if (!refreshPromise) {
-    refreshPromise = fetch("/api/drive-token?force=1", {
+  const version = driveSessionVersion;
+  if (!refreshPromise || refreshPromise.version !== version) {
+    const operation = { promise: null, version };
+    operation.promise = fetch("/api/drive-token?force=1", {
       cache: "no-store",
       credentials: "same-origin",
     })
@@ -23,11 +38,17 @@ async function refreshAccessToken() {
         return typeof data.accessToken === "string" ? data.accessToken : null;
       })
       .finally(() => {
-        refreshPromise = null;
+        if (refreshPromise === operation) refreshPromise = null;
       });
+    refreshPromise = operation;
   }
-  const token = await refreshPromise;
-  if (token) driveAccessToken = token;
+  const operation = refreshPromise;
+  const token = await operation.promise;
+  if (operation.version !== driveSessionVersion) return null;
+  if (token) {
+    driveAccessToken = token;
+    driveAccessInvalidated = false;
+  }
   return token;
 }
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { completeSignOut } from "@/lib/auth/sign-out-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const ascii = String.raw`
@@ -39,6 +40,12 @@ export default function SignInPage() {
     return () => subscription.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("notice") === "cleanup-pending") {
+      setMessage("La sesión se cerró en este dispositivo. Vuelve a iniciar sesión si necesitas usar Drive.");
+    }
+  }, []);
+
   async function signInWithGoogle() {
     setMessage(null);
     const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
@@ -49,8 +56,7 @@ export default function SignInPage() {
   }
 
   async function signOut() {
-    await createSupabaseBrowserClient().auth.signOut();
-    setUser(null);
+    await completeSignOut();
   }
 
   return (

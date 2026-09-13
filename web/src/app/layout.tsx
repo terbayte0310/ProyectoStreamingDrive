@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import { SessionSignOutCoordinator } from "@/components/session-sign-out-coordinator";
+
 export const metadata: Metadata = {
   title: { default: "Nébula", template: "%s · Nébula" },
   description: "Tu espacio privado para aprender, avanzar y volver a empezar.",
@@ -16,7 +18,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col"><SessionSignOutCoordinator />{children}</body>
     </html>
   );
 }

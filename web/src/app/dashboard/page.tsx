@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { completeSignOut } from "@/lib/auth/sign-out-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type AccessProfile = {
@@ -20,6 +21,7 @@ type ViewState =
 
 export default function DashboardPage() {
   const [view, setView] = useState<ViewState>({ kind: "loading" });
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -64,9 +66,8 @@ export default function DashboardPage() {
   }, []);
 
   async function signOut() {
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    setView({ kind: "signed-out" });
+    setIsSigningOut(true);
+    await completeSignOut();
   }
 
   return (
@@ -93,8 +94,8 @@ export default function DashboardPage() {
             <p className="muted">
               La cuenta {view.email} inició sesión correctamente, pero todavía no está en la lista de acceso.
             </p>
-            <button className="secondary-button w-fit" onClick={() => void signOut()} type="button">
-              Cerrar sesión
+            <button className="secondary-button w-fit" disabled={isSigningOut} onClick={() => void signOut()} type="button">
+              {isSigningOut ? "Cerrando sesión…" : "Cerrar sesión"}
             </button>
           </>
         ) : null}
@@ -113,8 +114,8 @@ export default function DashboardPage() {
               <a className="primary-button w-fit" href="/catalog">Abrir catálogo</a>
               {view.profile.role === "admin" ? <a className="secondary-button w-fit" href="/admin">Administrar catálogo</a> : null}
             </div>
-            <button className="secondary-button w-fit" onClick={() => void signOut()} type="button">
-              Cerrar sesión
+            <button className="secondary-button w-fit" disabled={isSigningOut} onClick={() => void signOut()} type="button">
+              {isSigningOut ? "Cerrando sesión…" : "Cerrar sesión"}
             </button>
           </>
         ) : null}

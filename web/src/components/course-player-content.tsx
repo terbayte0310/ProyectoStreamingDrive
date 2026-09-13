@@ -28,7 +28,7 @@ type Section = {
 };
 
 type PlayerState = "error" | "loading" | "needs-drive" | "ready";
-const workerRevision = "refresh-token-v1";
+const workerRevision = "logout-v2";
 
 async function getDriveWorker() {
   const registration = await navigator.serviceWorker.register(
