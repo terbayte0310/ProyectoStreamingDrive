@@ -98,6 +98,18 @@ Get-PSDrive -Name E | Select-Object Name,Used,Free
 
 Los comandos son una receta de piloto: cada índice de pista debe salir de `ffprobe`; no se sustituyen valores ni se ejecutan en lote.
 
+## Prueba web en red local
+
+El piloto no usa la vista previa de Drive, ya que podría transcodificar el archivo. El servidor temporal `scripts/serve_media_pilot.mjs` entrega solo las tres salidas del piloto y admite peticiones HTTP `Range`, necesarias para probar los saltos de tiempo.
+
+Con las salidas ya preparadas, iniciarlo desde la raíz del repositorio:
+
+```powershell
+node scripts/serve_media_pilot.mjs --media-dir E:\PilotoMultimedia --host 0.0.0.0 --port 8080
+```
+
+Todos los dispositivos deben estar en la misma red privada. En Windows se obtiene la IPv4 local con `ipconfig`; desde cada navegador se abre `http://IPV4_LOCAL:8080/`. La LG usa su navegador integrado. La Xiaomi Android TV necesita un navegador instalado compatible con TV. Si Windows solicita una regla de firewall, permitirla solamente para redes privadas. Detener el servidor con `Ctrl+C` al terminar; no deja archivos en Drive ni abre acceso público a Internet.
+
 ## Evidencia requerida para cerrar el piloto
 
 | Muestra | Vídeo y audio de entrada | Salida | Tamaño antes/después | Tiempo | LG | Xiaomi | Windows/Chrome | iPhone Chrome | iPhone Safari | iPad Safari | Búsqueda |
