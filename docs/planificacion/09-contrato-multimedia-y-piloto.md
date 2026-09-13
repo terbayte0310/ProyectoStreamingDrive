@@ -16,7 +16,7 @@ Validar un único perfil de reproducción antes de ampliar la biblioteca: MP4/H.
 | iPhone 15 Pro Max | Chrome y Safari actualizados |
 | iPad con M3 | Safari actualizado |
 
-La evidencia del piloto anotará la versión concreta del sistema, firmware y navegador el día de la prueba. Microsoft Edge no es requisito del MVP.
+La evidencia del piloto puede anotar la versión concreta del sistema, firmware y navegador cuando esté disponible; su ausencia no bloquea la validación funcional del piloto. Microsoft Edge no es requisito del MVP.
 
 ## Perfil admitido
 
