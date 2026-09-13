@@ -12,7 +12,6 @@ Validar un único perfil de reproducción antes de ampliar la biblioteca: MP4/H.
 | Dispositivo | Navegador o reproductor a validar |
 | --- | --- |
 | TV LG 55SM8000PSA (2020) | Reproductor o navegador integrado, con firmware actualizado |
-| TV Xiaomi con Android TV | Reproductor disponible en el dispositivo |
 | PC con Windows | Chrome estable actualizado |
 | iPhone 15 Pro Max | Chrome y Safari actualizados |
 | iPad con M3 | Safari actualizado |
@@ -108,14 +107,14 @@ Con las salidas ya preparadas, iniciarlo desde la raíz del repositorio:
 node scripts/serve_media_pilot.mjs --media-dir E:\PilotoMultimedia --host 0.0.0.0 --port 8080
 ```
 
-Todos los dispositivos deben estar en la misma red privada. En Windows se obtiene la IPv4 local con `ipconfig`; desde cada navegador se abre `http://IPV4_LOCAL:8080/`. La LG usa su navegador integrado. La Xiaomi Android TV necesita un navegador instalado compatible con TV. Si Windows solicita una regla de firewall, permitirla solamente para redes privadas. Detener el servidor con `Ctrl+C` al terminar; no deja archivos en Drive ni abre acceso público a Internet.
+Todos los dispositivos deben estar en la misma red privada. En Windows se obtiene la IPv4 local con `ipconfig`; desde cada navegador se abre `http://IPV4_LOCAL:8080/`. La LG usa su navegador integrado. Si Windows solicita una regla de firewall, permitirla solamente para redes privadas. Detener el servidor con `Ctrl+C` al terminar; no deja archivos en Drive ni abre acceso público a Internet.
 
 ## Evidencia requerida para cerrar el piloto
 
-| Muestra | Vídeo y audio de entrada | Salida | Tamaño antes/después | Tiempo | LG | Xiaomi | Windows/Chrome | iPhone Chrome | iPhone Safari | iPad Safari | Búsqueda |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| M1 | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente |
-| M2 | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente |
-| M3 | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente |
+| Muestra | Vídeo y audio de entrada | Salida | Tamaño antes/después | Tiempo | LG | Windows/Chrome | iPhone Chrome | iPhone Safari | iPad Safari | Búsqueda |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| M1 | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente |
+| M2 | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente |
+| M3 | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente | Pendiente |
 
 Cada reproducción debe iniciar, permitir saltar al menos a 10 %, 50 % y 90 % de la duración, y terminar sin error. El registro solo contendrá los identificadores anónimos de esta tabla. Si una prueba falla, el elemento queda `no disponible` para administración y el issue documentará el fallo antes de ampliar el alcance.
