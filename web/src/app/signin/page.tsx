@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { buildGoogleSignInOptions } from "@/lib/auth/google-oauth";
 import { completeSignOut } from "@/lib/auth/sign-out-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -63,7 +64,17 @@ export default function SignInPage() {
   }, []);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("notice") === "cleanup-pending") {
+    const searchParams = new URLSearchParams(window.location.search);
+    const error = searchParams.get("error");
+    const notice = searchParams.get("notice");
+    if (error === "drive_authorization") {
+      const timer = window.setTimeout(
+        () => setMessage("Google no entregó una autorización renovable para Drive. Cierra esta sesión y vuelve a entrar para conceder el acceso en el mismo inicio de sesión."),
+        0,
+      );
+      return () => window.clearTimeout(timer);
+    }
+    if (notice === "cleanup-pending") {
       const timer = window.setTimeout(
         () => setMessage("La sesión se cerró en este dispositivo. Vuelve a iniciar sesión si necesitas usar Drive."),
         0,
@@ -76,7 +87,7 @@ export default function SignInPage() {
     setMessage(null);
     const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: buildGoogleSignInOptions(window.location.origin),
     });
     if (error) setMessage("Google no pudo iniciar la sesión. Inténtalo nuevamente.");
   }
