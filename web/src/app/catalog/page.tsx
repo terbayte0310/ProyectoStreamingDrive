@@ -6,6 +6,8 @@ import { CourseCover } from "@/components/course-cover";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Profile = { email: string; is_authorized: boolean; role: "admin" | "reader" };
+type LibraryModule = "courses" | "movies" | "series";
+type ModuleAccessRow = { module: LibraryModule };
 type CatalogHomeRow = {
   category_custom_title: string | null;
   category_detected_title: string | null;
@@ -66,7 +68,8 @@ function CourseCard({ course }: { course: CourseView }) {
 
 export const dynamic = "force-dynamic";
 
-export default async function CatalogPage() {
+export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ access?: string }> }) {
+  const { access: accessNotice } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/signin");
@@ -74,7 +77,14 @@ export default async function CatalogPage() {
   const { data: profile } = await supabase.from("profiles").select("email, is_authorized, role").eq("id", userData.user.id).maybeSingle<Profile>();
   if (!profile?.is_authorized) redirect("/dashboard");
 
-  const catalogResult = await supabase.rpc("get_catalog_home");
+  const moduleResult = await supabase.rpc("get_my_module_access");
+  if (moduleResult.error) {
+    return <main className="app-shell grid min-h-screen place-items-center"><div className="status-card">No se pudieron comprobar los módulos asignados.</div></main>;
+  }
+  const moduleRows = Array.isArray(moduleResult.data) ? moduleResult.data as unknown as ModuleAccessRow[] : [];
+  const modules = new Set(moduleRows.flatMap((row) => row.module === "courses" || row.module === "movies" || row.module === "series" ? [row.module] : []));
+  const hasCourses = modules.has("courses");
+  const catalogResult = hasCourses ? await supabase.rpc("get_catalog_home") : { data: [], error: null };
   if (catalogResult.error) {
     return <main className="app-shell grid min-h-screen place-items-center"><div className="status-card">No se pudo cargar el catálogo todavía.</div></main>;
   }
@@ -106,8 +116,25 @@ export default async function CatalogPage() {
 
   return (
     <div className="app-shell">
-      <AppHeader admin={profile.role === "admin"} email={profile.email} />
+      <AppHeader admin={profile.role === "admin"} email={profile.email} showNavigation={hasCourses} />
       <main className="catalog-main page-width">
+        {accessNotice === "course-denied" ? <div className="status-card mb-8">No tienes acceso al módulo Cursos. El catálogo muestra únicamente los módulos asignados a tu cuenta.</div> : null}
+        {!modules.size ? (
+          <section className="status-card">
+            <p className="eyebrow">Acceso pendiente</p>
+            <h1 className="mt-2 text-3xl font-semibold">Todavía no tienes módulos asignados.</h1>
+            <p className="mt-3 muted">Solicita a un administrador acceso a Cursos, Películas o Series.</p>
+          </section>
+        ) : null}
+        {!hasCourses && modules.size ? (
+          <section className="status-card mb-8">
+            <p className="eyebrow">Módulos autorizados</p>
+            <h1 className="mt-2 text-3xl font-semibold">{[...modules].map((module) => module === "movies" ? "Películas" : module === "series" ? "Series" : "Cursos").join(" y ")}</h1>
+            <p className="mt-3 muted">Solo verás contenido de los módulos que tengas asignados. Sus catálogos aparecerán aquí cuando estén publicados.</p>
+          </section>
+        ) : null}
+
+        {hasCourses ? <>
         {featured ? (
           <section className="hero">
             <div className="hero-copy">
@@ -134,6 +161,7 @@ export default async function CatalogPage() {
           {courseViews.some((course) => !course.category_id) ? <section className="section-block"><div className="section-heading"><div><h2>Más de tu biblioteca</h2></div></div><div className="course-rail">{courseViews.filter((course) => !course.category_id).map((course) => <CourseCard course={course} key={course.id} />)}</div></section> : null}
           {!courseViews.length ? <div className="status-card">Todavía no hay cursos importados.</div> : null}
         </div>
+        </> : null}
       </main>
     </div>
   );

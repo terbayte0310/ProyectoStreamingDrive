@@ -99,6 +99,12 @@ export default function CoursePlayerContent() {
           router.replace("/signin");
           return;
         }
+        const { data: hasCourses, error: accessError } = await db.rpc("has_module_access", { p_module: "courses" });
+        if (accessError) throw new Error("No se pudo comprobar el acceso al curso.");
+        if (!hasCourses) {
+          router.replace("/catalog?access=course-denied");
+          return;
+        }
         if (!requestedLessonId) {
           router.replace("/catalog");
           return;

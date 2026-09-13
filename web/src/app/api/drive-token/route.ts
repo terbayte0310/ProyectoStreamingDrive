@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentAccess } from "@/lib/auth/access";
 import { clearDriveSessionCookies, DRIVE_ACCESS_COOKIE, DRIVE_REFRESH_COOKIE, DRIVE_USER_COOKIE, refreshDriveAccessToken, setDriveSessionCookies } from "@/lib/drive/session";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,10 @@ export async function GET(request: NextRequest) {
   const access = await getCurrentAccess();
   if (!access) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
   if (!access.profile?.is_authorized) return NextResponse.json({ error: "Esta cuenta no está autorizada." }, { status: 403 });
+
+  const supabase = await createSupabaseServerClient();
+  const { data: hasCourses, error: accessError } = await supabase.rpc("has_module_access", { p_module: "courses" });
+  if (accessError || !hasCourses) return NextResponse.json({ error: "No tienes acceso al módulo Cursos." }, { status: 403 });
 
   const driveUserId = request.cookies.get(DRIVE_USER_COOKIE)?.value;
   if (driveUserId !== access.user.id) {

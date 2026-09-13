@@ -34,9 +34,15 @@ function DriveAccessContent() {
 
   async function authorize() {
     const returnTo = searchParams.get("returnTo") ?? "/catalog";
+    const supabase = createSupabaseBrowserClient();
+    const { data: hasCourses, error: accessError } = await supabase.rpc("has_module_access", { p_module: "courses" });
+    if (accessError || !hasCourses) {
+      router.replace("/catalog?access=course-denied");
+      return;
+    }
     const callback = new URL("/auth/drive-callback", window.location.origin);
     callback.searchParams.set("returnTo", returnTo);
-    const { error: authorizationError } = await createSupabaseBrowserClient().auth.signInWithOAuth({
+    const { error: authorizationError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         queryParams: { access_type: "offline", prompt: "consent" },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { setDriveSessionCookies } from "@/lib/drive/session";
+import { clearDriveSessionCookies, setDriveSessionCookies } from "@/lib/drive/session";
 import { getRequestOrigin } from "@/lib/http/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -35,6 +35,12 @@ export async function GET(request: NextRequest) {
     .eq("id", data.user.id)
     .maybeSingle<{ is_authorized: boolean }>();
   if (!profile?.is_authorized) return NextResponse.redirect(new URL("/dashboard", requestOrigin));
+  const { data: hasCourses, error: accessError } = await supabase.rpc("has_module_access", { p_module: "courses" });
+  if (accessError || !hasCourses) {
+    const response = NextResponse.redirect(new URL("/catalog?access=course-denied", requestOrigin));
+    clearDriveSessionCookies(response);
+    return response;
+  }
   if (!data.session.provider_refresh_token) {
     return NextResponse.redirect(new URL("/drive-access?error=refresh-token", requestOrigin));
   }

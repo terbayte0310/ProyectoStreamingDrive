@@ -47,7 +47,9 @@ async function getAuthorizedClient() {
     .select("is_authorized")
     .eq("id", userData.user.id)
     .maybeSingle<{ is_authorized: boolean }>();
-  return profile?.is_authorized ? supabase : null;
+  if (!profile?.is_authorized) return null;
+  const { data: hasCourses, error } = await supabase.rpc("has_module_access", { p_module: "courses" });
+  return !error && hasCourses ? supabase : null;
 }
 
 export async function POST(request: NextRequest) {
