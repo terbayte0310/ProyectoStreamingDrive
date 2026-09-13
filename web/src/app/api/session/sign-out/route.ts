@@ -2,12 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 import { clearDriveSessionCookies } from "@/lib/drive/session";
+import { getRequestOrigin } from "@/lib/http/request-origin";
 
 export const dynamic = "force-dynamic";
 
 function isSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
-  return !origin || origin === request.nextUrl.origin;
+  return !origin || origin === getRequestOrigin(request);
 }
 
 export async function POST(request: NextRequest) {

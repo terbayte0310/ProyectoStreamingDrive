@@ -88,7 +88,10 @@ export async function completeSignOut() {
     announceSignOut();
   }
 
-  window.location.assign(cleanupWarning ? "/signin?notice=cleanup-pending" : "/signin?notice=signed-out");
+  window.location.replace(new URL(
+    cleanupWarning ? "/signin?notice=cleanup-pending" : "/signin?notice=signed-out",
+    window.location.origin,
+  ).toString());
 }
 
 export async function acceptRemoteSignOut() {
@@ -103,6 +106,6 @@ export async function acceptRemoteSignOut() {
     // The initiating tab already requested server-side cookie cleanup.
   }
   if (window.location.pathname !== "/signin") {
-    window.location.assign("/signin?notice=signed-out");
+    window.location.replace(new URL("/signin?notice=signed-out", window.location.origin).toString());
   }
 }

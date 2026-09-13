@@ -1,18 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { getRequestOrigin } from "@/lib/http/request-origin";
+
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  const requestOrigin = getRequestOrigin(request);
   const code = requestUrl.searchParams.get("code");
   const flowId = requestUrl.searchParams.get("sb_flow_id");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!code || !url || !publishableKey) {
-    return NextResponse.redirect(new URL("/signin?error=oauth_callback", requestUrl.origin));
+    return NextResponse.redirect(new URL("/signin?error=oauth_callback", requestOrigin));
   }
 
-  const response = NextResponse.redirect(new URL("/catalog", requestUrl.origin));
+  const response = NextResponse.redirect(new URL("/catalog", requestOrigin));
   const supabase = createServerClient(url, publishableKey, {
     cookies: {
       getAll: () => request.cookies.getAll(),
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
   });
   const { error } = await supabase.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
   if (error) {
-    const failed = NextResponse.redirect(new URL("/signin?error=oauth_callback", requestUrl.origin));
+    const failed = NextResponse.redirect(new URL("/signin?error=oauth_callback", requestOrigin));
     failed.headers.set("Cache-Control", "private, no-store");
     return failed;
   }

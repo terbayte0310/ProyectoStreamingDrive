@@ -32,17 +32,24 @@ export default function SignInPage() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setIsLoading(false);
-    });
+    void supabase.auth.getUser()
+      .then(({ data, error }) => {
+        setUser(data.user);
+        if (error) setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
+      })
+      .catch(() => setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo."))
+      .finally(() => setIsLoading(false));
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
     return () => subscription.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("notice") === "cleanup-pending") {
-      setMessage("La sesión se cerró en este dispositivo. Vuelve a iniciar sesión si necesitas usar Drive.");
+      const timer = window.setTimeout(
+        () => setMessage("La sesión se cerró en este dispositivo. Vuelve a iniciar sesión si necesitas usar Drive."),
+        0,
+      );
+      return () => window.clearTimeout(timer);
     }
   }, []);
 
