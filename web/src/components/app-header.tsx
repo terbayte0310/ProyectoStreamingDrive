@@ -8,17 +8,17 @@ import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navigation = [
-  { href: "/catalog", label: "Inicio" },
+  { href: "/catalog/cursos", label: "Inicio" },
   { href: "#continuar", label: "Continuar" },
   { href: "#biblioteca", label: "Biblioteca" },
 ];
 
-export function AppHeader({ admin = false, email, showNavigation = true }: { admin?: boolean; email?: string; showNavigation?: boolean }) {
+export function AppHeader({ admin = false, contextLabel = "Panel de administración", email, showNavigation = true }: { admin?: boolean; contextLabel?: string; email?: string; showNavigation?: boolean }) {
   const pathname = usePathname();
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    if (pathname !== "/catalog") return;
+    if (pathname !== "/catalog" && pathname !== "/catalog/cursos") return;
     const updateFromHash = () => {
       const index = navigation.findIndex((item) => item.href === window.location.hash);
       setActiveIndex(index >= 0 ? index : 0);
@@ -29,7 +29,7 @@ export function AppHeader({ admin = false, email, showNavigation = true }: { adm
   }, [pathname]);
 
   useEffect(() => {
-    if (pathname !== "/catalog") return;
+    if (pathname !== "/catalog" && pathname !== "/catalog/cursos") return;
     const sections = navigation.slice(1).map((item) => document.querySelector(item.href)).filter(Boolean) as HTMLElement[];
     if (!sections.length) return;
     const observer = new IntersectionObserver(
@@ -60,7 +60,7 @@ export function AppHeader({ admin = false, email, showNavigation = true }: { adm
             </Link>
           ))}
         </nav>
-      ) : <div className="admin-header-label">Panel de administración</div>}
+      ) : <div className="admin-header-label">{contextLabel}</div>}
       <div className="header-actions">
         {admin && pathname !== "/admin" ? <Link className="header-admin" href="/admin">Admin</Link> : null}
         <ThemeToggle />

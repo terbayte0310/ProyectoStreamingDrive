@@ -119,6 +119,38 @@ button { cursor: pointer; }
 .auth-session { display: grid; gap: 1rem; padding: 1.2rem; border: 1px solid var(--line-strong); border-radius: 1.1rem; background: var(--surface); }
 
 .catalog-main { padding-bottom: 6rem; }
+.catalog-module-nav { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: 1.4rem; }
+.catalog-module-link { padding: .55rem .9rem; border: 1px solid var(--line); border-radius: 999px; color: var(--text-soft); font-size: .82rem; font-weight: 700; text-decoration: none; }
+.catalog-module-link-active { border-color: var(--blue); color: white; background: linear-gradient(135deg, var(--blue), var(--blue-bright)); }
+.media-catalog-intro { max-width: 46rem; padding: 3.5rem 0 2rem; }
+.media-catalog-intro h1, .media-detail h1 { margin: .5rem 0 0; font-size: clamp(2.7rem, 6vw, 5.8rem); line-height: .92; letter-spacing: -.07em; }
+.media-catalog-intro p:not(.eyebrow) { margin: 1rem 0 0; color: var(--text-soft); line-height: 1.7; }
+.media-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1.2rem; }
+.media-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 1.35rem; background: var(--bg-solid); box-shadow: var(--shadow-small); transition: transform var(--duration-ui) var(--ease-out), border-color var(--duration-ui) ease; }
+.media-card:hover { border-color: var(--line-strong); transform: translateY(-4px); }
+.media-poster-image, .media-poster-placeholder { display: grid; width: 100%; aspect-ratio: 2 / 3; place-items: center; background: linear-gradient(135deg, var(--blue-soft), var(--surface)); color: var(--blue); font-size: 3rem; font-weight: 800; object-fit: cover; }
+.media-card-body { display: flex; flex: 1; flex-direction: column; padding: 1rem; }
+.media-card h2 { margin: 0; font-size: 1.05rem; line-height: 1.3; letter-spacing: -.025em; }
+.media-card-summary { display: -webkit-box; min-height: 4.3em; margin: .6rem 0 0; overflow: hidden; color: var(--text-soft); font-size: .84rem; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.media-card-link { margin-top: auto; padding-top: 1rem; color: var(--blue); font-size: .82rem; font-weight: 750; text-decoration: none; }
+.catalog-back-link { display: inline-block; margin-top: 2rem; color: var(--blue); font-size: .9rem; font-weight: 700; text-decoration: none; }
+.media-detail { display: grid; grid-template-columns: minmax(12rem, 22rem) minmax(0, 1fr); align-items: start; gap: clamp(2rem, 5vw, 5rem); padding: 2rem 0 3rem; }
+.media-detail .media-poster-image, .media-detail .media-poster-placeholder { border: 1px solid var(--line); border-radius: 1.5rem; box-shadow: var(--shadow); }
+.media-detail-meta { margin: 1.2rem 0 0; color: var(--blue); font-size: .92rem; font-weight: 700; }
+.media-detail-overview { max-width: 48rem; margin: 1rem 0 0; color: var(--text-soft); line-height: 1.75; }
+.media-seasons { margin-top: 2rem; }
+.media-season { margin-top: .8rem; overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--bg-elevated); }
+.media-season summary { display: grid; grid-template-columns: 7rem minmax(0, 1fr) auto; gap: 1rem; padding: 1rem 1.2rem; cursor: pointer; list-style: none; }
+.media-season summary::-webkit-details-marker { display: none; }
+.media-season summary span, .media-season summary small { color: var(--text-soft); font-size: .84rem; }
+.media-season-overview { margin: 0; padding: 0 1.2rem 1rem; color: var(--text-soft); line-height: 1.6; }
+.media-episode-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.media-episode-list li { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 1rem; padding: 1rem 1.2rem; border-top: 1px solid var(--line); }
+.media-episode-list li:first-child { border-top: 0; }
+.media-episode-list li > span { color: var(--blue); font-size: .8rem; font-weight: 800; }
+.media-episode-list strong { display: block; font-size: .92rem; }
+.media-episode-list p { margin: .35rem 0 0; color: var(--text-soft); font-size: .84rem; line-height: 1.55; }
+.tmdb-attribution { margin: 3rem 0 0; color: var(--text-soft); font-size: .74rem; line-height: 1.5; }
 .hero { position: relative; display: grid; min-height: 32rem; grid-template-columns: minmax(0, .92fr) minmax(26rem, 1.08fr); align-items: center; gap: 4rem; padding: 4rem 0 3rem; }
 .hero-copy { position: relative; z-index: 2; }
 .hero h1 { max-width: 11ch; margin: .8rem 0 0; font-size: clamp(3rem, 6vw, 6.4rem); line-height: .9; letter-spacing: -.075em; }

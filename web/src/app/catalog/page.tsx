@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app-header";
 import { CourseCover } from "@/components/course-cover";
+import { CatalogModuleNavigation } from "@/components/media-catalog";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Profile = { email: string; is_authorized: boolean; role: "admin" | "reader" };
@@ -68,7 +69,7 @@ function CourseCard({ course }: { course: CourseView }) {
 
 export const dynamic = "force-dynamic";
 
-export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ access?: string }> }) {
+export default async function CatalogPage({ forceCourses = false, searchParams }: { forceCourses?: boolean; searchParams: Promise<{ access?: string }> }) {
   const { access: accessNotice } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -84,6 +85,12 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const moduleRows = Array.isArray(moduleResult.data) ? moduleResult.data as unknown as ModuleAccessRow[] : [];
   const modules = new Set(moduleRows.flatMap((row) => row.module === "courses" || row.module === "movies" || row.module === "series" ? [row.module] : []));
   const hasCourses = modules.has("courses");
+  if (!forceCourses) {
+    const suffix = accessNotice ? `?access=${encodeURIComponent(accessNotice)}` : "";
+    if (hasCourses) redirect(`/catalog/cursos${suffix}`);
+    if (modules.has("movies")) redirect("/catalog/movies");
+    if (modules.has("series")) redirect("/catalog/series");
+  }
   const catalogResult = hasCourses ? await supabase.rpc("get_catalog_home") : { data: [], error: null };
   if (catalogResult.error) {
     return <main className="app-shell grid min-h-screen place-items-center"><div className="status-card">No se pudo cargar el catálogo todavía.</div></main>;
@@ -118,6 +125,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
     <div className="app-shell">
       <AppHeader admin={profile.role === "admin"} email={profile.email} showNavigation={hasCourses} />
       <main className="catalog-main page-width">
+        <CatalogModuleNavigation active="courses" modules={[...modules]} />
         {accessNotice === "course-denied" ? <div className="status-card mb-8">No tienes acceso al módulo Cursos. El catálogo muestra únicamente los módulos asignados a tu cuenta.</div> : null}
         {!modules.size ? (
           <section className="status-card">
