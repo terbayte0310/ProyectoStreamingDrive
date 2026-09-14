@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local media preparation paths and private audit details.
+/docs/MEDIA_HLS_LOCAL.md

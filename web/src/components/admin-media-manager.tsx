@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
@@ -41,6 +41,8 @@ export type TmdbMetadata = {
 
 type Selection = { id: string; kind: MediaKind } | null;
 type TmdbSearchResult = { id: number; originalTitle: string | null; posterPath: string | null; releaseDate: string | null; title: string | null };
+type PlaybackSource = { drive_root_folder_id: string; id: string; is_active: boolean; name: string };
+type PlaybackPackage = { drive_root_folder_id: string; episode_id: string | null; id: string; last_error: string | null; movie_id: string | null; source_id: string; status: "draft" | "ready" | "review" | "unavailable" };
 
 function titleFor(record: AdminMediaRecord) {
   return record.admin_title || record.internal_code;
@@ -72,6 +74,16 @@ export function AdminMediaManager({
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<TmdbSearchResult[]>([]);
+  const [playbackSources, setPlaybackSources] = useState<PlaybackSource[]>([]);
+  const [playbackPackages, setPlaybackPackages] = useState<PlaybackPackage[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const response = await fetch("/api/admin/media-playback", { cache: "no-store" });
+      const result = await response.json().catch(() => ({})) as { packages?: PlaybackPackage[]; sources?: PlaybackSource[] };
+      if (response.ok) { setPlaybackSources(result.sources ?? []); setPlaybackPackages(result.packages ?? []); }
+    })();
+  }, []);
 
   const selected = useMemo(() => {
     if (!selection) return null;
@@ -234,10 +246,39 @@ export function AdminMediaManager({
     }
   }
 
+  async function createPlaybackSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy("playback-source"); setMessage("");
+    try {
+      const response = await fetch("/api/admin/media-playback", { body: JSON.stringify({ action: "create-source", driveRootFolderId: form.get("driveRootFolderId"), name: form.get("name") }), headers: { "Content-Type": "application/json" }, method: "POST" });
+      const result = await response.json() as { error?: string; source?: PlaybackSource };
+      if (!response.ok || !result.source) throw new Error(result.error ?? "No se pudo guardar la fuente.");
+      setPlaybackSources((current) => [...current, result.source!]); event.currentTarget.reset(); setMessage("Fuente de Drive guardada.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar la fuente."); } finally { setBusy(""); }
+  }
+
+  async function scanPlaybackPackage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selection || (selection.kind !== "movie" && selection.kind !== "episode")) return;
+    const form = new FormData(event.currentTarget);
+    setBusy("playback-scan"); setMessage("");
+    try {
+      const response = await fetch("/api/admin/media-playback", { body: JSON.stringify({ action: "scan", contentId: selection.id, contentKind: selection.kind, driveRootFolderId: form.get("driveRootFolderId"), sourceId: form.get("sourceId") }), headers: { "Content-Type": "application/json" }, method: "POST" });
+      const result = await response.json() as { error?: string; packageId?: string; scannedAssets?: number; status?: PlaybackPackage["status"] };
+      if (!response.ok || !result.packageId || !result.status) throw new Error(result.error ?? "No se pudo escanear el paquete HLS.");
+      const relation = selection.kind === "movie" ? { movie_id: selection.id } : { episode_id: selection.id };
+      setPlaybackPackages((current) => [...current.filter((entry) => entry.movie_id !== selection.id && entry.episode_id !== selection.id), { drive_root_folder_id: String(form.get("driveRootFolderId")), episode_id: relation.episode_id ?? null, id: result.packageId!, last_error: null, movie_id: relation.movie_id ?? null, source_id: String(form.get("sourceId")), status: result.status! }]);
+      setMessage(`Paquete HLS listo: ${result.scannedAssets ?? 0} archivos registrados.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo escanear el paquete HLS."); } finally { setBusy(""); }
+  }
+
   const meta = currentMetadata();
   const isSeriesDraft = selection?.kind === "season" || selection?.kind === "episode"
     ? series.find((item) => item.id === activeSeriesId)?.status === "draft"
     : false;
+  const supportsPlayback = selection?.kind === "movie" || selection?.kind === "episode";
+  const playbackPackage = selection ? playbackPackages.find((entry) => selection.kind === "movie" ? entry.movie_id === selection.id : selection.kind === "episode" ? entry.episode_id === selection.id : false) : null;
 
   return (
     <section className="admin-manager admin-reveal mt-8 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -289,6 +330,8 @@ export function AdminMediaManager({
               <div className="mt-5 flex flex-wrap gap-2">{(selection?.kind === "season" || selection?.kind === "episode") && !meta ? <button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void tmdbAction("link")} type="button">Vincular desde la serie</button> : null}{meta ? <><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void tmdbAction("refresh")} type="button">Refrescar</button><button className="rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void tmdbAction("unlink")} type="button">Desvincular</button></> : null}</div>
               <p className="mt-4 text-xs text-slate-500">Datos e imágenes proporcionados por TMDB. Esta aplicación no está respaldada ni certificada por TMDB.</p>
             </section>
+
+            {supportsPlayback ? <section className="admin-panel p-6"><div><p className="eyebrow">Reproducción</p><h2 className="mt-1 text-xl font-semibold">Paquete HLS en Drive</h2><p className="mt-2 text-sm text-slate-500">Usa una carpeta con <code>master.m3u8</code>, listas de vídeo/audio y subtítulos. El escaneo registra los archivos sin publicar enlaces directos.</p></div>{playbackPackage ? <p className={"mt-4 rounded-lg px-3 py-2 text-sm " + (playbackPackage.status === "ready" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>Estado: <strong>{playbackPackage.status}</strong>{playbackPackage.last_error ? ` · ${playbackPackage.last_error}` : ""}</p> : <p className="mt-4 text-sm text-slate-500">Aún no hay paquete vinculado.</p>}<form className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void scanPlaybackPackage(event)}><select className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue="" name="sourceId" required><option disabled value="">Fuente de Drive</option>{playbackSources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select><input className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue={playbackPackage?.drive_root_folder_id ?? ""} name="driveRootFolderId" placeholder="ID de carpeta del paquete HLS" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy) || !playbackSources.some((source) => source.is_active)} type="submit">{busy === "playback-scan" ? "Escaneando…" : playbackPackage ? "Reescanear" : "Vincular y escanear"}</button></form>{!playbackSources.length ? <form className="mt-5 grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void createPlaybackSource(event)}><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="name" placeholder="Nombre de fuente, p. ej. Medios" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="driveRootFolderId" placeholder="ID de carpeta raíz de Drive" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} type="submit">{busy === "playback-source" ? "Guardando…" : "Guardar fuente"}</button></form> : null}</section> : null}
 
             {selection?.kind === "series" ? <section className="admin-panel p-6"><div className="flex items-center justify-between gap-3"><div><p className="eyebrow">Estructura</p><h2 className="mt-1 text-xl font-semibold">Temporadas y episodios</h2></div>{busy === "load:" + selected.id ? <span className="text-sm text-slate-500">Cargando…</span> : null}</div><form className="mt-4 flex flex-wrap gap-2" onSubmit={(event) => void createRecord(event, "season", selected.id)}><input className="admin-input min-w-56 flex-1 rounded-lg border px-3 py-2 text-sm" name="title" placeholder="Título de nueva temporada" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código opcional" /><input name="status" type="hidden" value="draft" /><button className="secondary-button text-sm" type="submit">Añadir temporada</button></form><div className="mt-4 grid gap-3">{seasons.map((season) => <div className="rounded-xl border border-slate-200 p-4" key={season.id}><button className="font-semibold" onClick={() => choose("season", season.id)} type="button">T{season.season_number}: {titleFor(season)}</button><span className="ml-2 text-xs text-slate-500">{statusLabel(season.status)}</span><div className="mt-3 grid gap-2 border-l-2 border-blue-100 pl-3">{episodes.filter((episode) => episode.season_id === season.id).map((episode) => <button className="text-left text-sm text-slate-600 hover:text-blue-600" key={episode.id} onClick={() => choose("episode", episode.id)} type="button">E{episode.episode_number}: {titleFor(episode)} · {statusLabel(episode.status)}</button>)}</div><form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => void createRecord(event, "episode", season.id)}><input className="admin-input min-w-48 flex-1 rounded-lg border px-3 py-2 text-sm" name="title" placeholder="Título de nuevo episodio" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código opcional" /><input name="status" type="hidden" value="draft" /><button className="secondary-button text-sm" type="submit">Añadir episodio</button></form></div>)}</div></section> : null}
           </>

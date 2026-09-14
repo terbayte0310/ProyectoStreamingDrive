@@ -2,6 +2,7 @@ let driveAccessToken = null;
 let refreshPromise = null;
 let driveSessionVersion = 0;
 let driveAccessInvalidated = false;
+let driveModule = "courses";
 const announcedTransferNotices = new Set();
 const maxTransferRetries = 2;
 
@@ -10,6 +11,9 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "drive-access-token" && typeof event.data.token === "string") {
+    if (event.data.module === "movies" || event.data.module === "series" || event.data.module === "courses") {
+      driveModule = event.data.module;
+    }
     if (driveAccessInvalidated) {
       void refreshAccessToken().then((token) => event.ports[0]?.postMessage({ accepted: Boolean(token) }));
     } else {
@@ -134,7 +138,10 @@ async function refreshAccessToken() {
   const version = driveSessionVersion;
   if (!refreshPromise || refreshPromise.version !== version) {
     const operation = { promise: null, version };
-    operation.promise = fetch("/api/drive-token?force=1", {
+    const tokenUrl = driveModule === "courses"
+      ? "/api/drive-token?force=1"
+      : `/api/drive-token?force=1&module=${encodeURIComponent(driveModule)}`;
+    operation.promise = fetch(tokenUrl, {
       cache: "no-store",
       credentials: "same-origin",
     })
@@ -195,16 +202,35 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   const isStreamRequest = url.pathname.startsWith("/drive-stream/");
   const isDownloadRequest = url.pathname.startsWith("/drive-download/");
-  if (!isStreamRequest && !isDownloadRequest) return;
+  const isMediaStreamRequest = url.pathname.startsWith("/media-stream/");
+  if (!isStreamRequest && !isDownloadRequest && !isMediaStreamRequest) return;
 
-  const pathPrefix = isStreamRequest ? "/drive-stream/" : "/drive-download/";
-  const fileId = url.pathname.slice(pathPrefix.length);
+  const pathPrefix = isMediaStreamRequest ? "/media-stream/" : isStreamRequest ? "/drive-stream/" : "/drive-download/";
+  let fileId = url.pathname.slice(pathPrefix.length);
   if (!fileId) {
     event.respondWith(new Response("Drive authorization is missing.", { status: 401 }));
     return;
   }
 
   event.respondWith((async () => {
+    if (isMediaStreamRequest) {
+      const assetResponse = await fetch(`/api/media-hls/assets/${encodeURIComponent(fileId)}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const asset = await assetResponse.json().catch(() => ({}));
+      if (!assetResponse.ok || typeof asset.driveFileId !== "string") {
+        return new Response(typeof asset.error === "string" ? asset.error : "El archivo de reproducción no está disponible.", { status: assetResponse.status || 404 });
+      }
+      if (asset.module === "movies" || asset.module === "series") driveModule = asset.module;
+      const manifestResponse = await fetch(`/api/media-hls/assets/${encodeURIComponent(fileId)}/manifest`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (manifestResponse.ok) return manifestResponse;
+      if (manifestResponse.status !== 404) return manifestResponse;
+      fileId = asset.driveFileId;
+    }
     if (!driveAccessToken && !(await refreshAccessToken())) {
       return new Response("Drive authorization is missing.", { status: 401 });
     }

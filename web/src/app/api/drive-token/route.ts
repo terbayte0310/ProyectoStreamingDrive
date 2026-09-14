@@ -11,9 +11,13 @@ export async function GET(request: NextRequest) {
   if (!access) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
   if (!access.profile?.is_authorized) return NextResponse.json({ error: "Esta cuenta no está autorizada." }, { status: 403 });
 
+  const requestedModule = request.nextUrl.searchParams.get("module") ?? "courses";
+  if (requestedModule !== "courses" && requestedModule !== "movies" && requestedModule !== "series") {
+    return NextResponse.json({ error: "El módulo solicitado no es válido." }, { status: 400 });
+  }
   const supabase = await createSupabaseServerClient();
-  const { data: hasCourses, error: accessError } = await supabase.rpc("has_module_access", { p_module: "courses" });
-  if (accessError || !hasCourses) return NextResponse.json({ error: "No tienes acceso al módulo Cursos." }, { status: 403 });
+  const { data: hasModule, error: accessError } = await supabase.rpc("has_module_access", { p_module: requestedModule });
+  if (accessError || !hasModule) return NextResponse.json({ error: `No tienes acceso al módulo ${requestedModule}.` }, { status: 403 });
 
   const driveUserId = request.cookies.get(DRIVE_USER_COOKIE)?.value;
   if (driveUserId !== access.user.id) {
