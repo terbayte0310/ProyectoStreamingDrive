@@ -58,3 +58,12 @@ test("TMDB secret remains server-only and the route limits mutations to administ
   assert.match(route, /body\.action === "unlink"[\s\S]*\.update\(emptyCache\(\)\)/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_TMDB/);
 });
+
+test("TMDB child links resolve through the already cached parent series", () => {
+  const client = readFileSync(new URL("../src/lib/tmdb/client.ts", import.meta.url), "utf8");
+  assert.match(route, /const isChild = body\.contentKind === "season" \|\| body\.contentKind === "episode"/);
+  assert.match(route, /isChild && !context\.parentTmdbId/);
+  assert.match(route, /tmdbId: tmdbId \?\? undefined/);
+  assert.match(client, /tmdbId\?: number/);
+  assert.match(client, /if \(tmdbId && metadata\.tmdb_id !== tmdbId\)/);
+});

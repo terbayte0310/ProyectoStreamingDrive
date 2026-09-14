@@ -171,7 +171,8 @@ export async function POST(request: NextRequest) {
     if (error || !data?.tmdb_id) return noStoreJson({ error: "El contenido no está vinculado a TMDB." }, { status: 409 });
     tmdbId = data.tmdb_id;
   }
-  if (!tmdbId || ((body.contentKind === "season" || body.contentKind === "episode") && !context.parentTmdbId)) {
+  const isChild = body.contentKind === "season" || body.contentKind === "episode";
+  if ((!isChild && !tmdbId) || (isChild && !context.parentTmdbId)) {
     return noStoreJson({ error: "Selecciona un identificador válido y vincula primero la serie principal." }, { status: 409 });
   }
 
@@ -181,7 +182,7 @@ export async function POST(request: NextRequest) {
       kind: body.contentKind,
       parentTmdbId: context.parentTmdbId,
       seasonNumber: context.seasonNumber,
-      tmdbId,
+      tmdbId: tmdbId ?? undefined,
     });
     const { data, error } = await supabase
       .from("media_tmdb_metadata")

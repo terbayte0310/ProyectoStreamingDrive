@@ -98,11 +98,11 @@ export async function fetchTmdbMetadata({
   kind: TmdbMediaKind;
   parentTmdbId?: number;
   seasonNumber?: number;
-  tmdbId: number;
+  tmdbId?: number;
 }): Promise<TmdbCachedMetadata & { tmdb_fallback_locale: string | null; tmdb_locale: string }> {
   let pathname: string;
-  if (kind === "movie") pathname = `/movie/${tmdbId}`;
-  else if (kind === "series") pathname = `/tv/${tmdbId}`;
+  if (kind === "movie" && tmdbId) pathname = `/movie/${tmdbId}`;
+  else if (kind === "series" && tmdbId) pathname = `/tv/${tmdbId}`;
   else if (parentTmdbId && seasonNumber && kind === "season") pathname = `/tv/${parentTmdbId}/season/${seasonNumber}`;
   else if (parentTmdbId && seasonNumber && episodeNumber && kind === "episode") pathname = `/tv/${parentTmdbId}/season/${seasonNumber}/episode/${episodeNumber}`;
   else throw new Error("Falta la relación TMDB de la serie para consultar este contenido.");
@@ -113,6 +113,6 @@ export async function fetchTmdbMetadata({
     parentId: parentTmdbId,
     seasonNumber,
   });
-  if (metadata.tmdb_id !== tmdbId) throw new TmdbClientError("El identificador seleccionado no corresponde al contenido de TMDB.", 422);
+  if (tmdbId && metadata.tmdb_id !== tmdbId) throw new TmdbClientError("El identificador seleccionado no corresponde al contenido de TMDB.", 422);
   return { ...metadata, tmdb_fallback_locale: result.fallbackLocale, tmdb_locale: result.locale };
 }

@@ -39,6 +39,7 @@ export default async function AdminPage() {
             <div className="admin-stat"><strong>{courses.length}</strong><span>Cursos</span></div>
             <div className="admin-stat"><strong>{visibleCourses}</strong><span>Publicados</span></div>
             <div className="admin-stat"><strong>Por curso</strong><span>Carga bajo demanda</span></div>
+            <Link className="secondary-button" href="/admin/media">Movies y Series <span aria-hidden="true">↗</span></Link>
             <Link className="secondary-button" href="/catalog">Ver catálogo <span aria-hidden="true">↗</span></Link>
           </div>
         </section>
