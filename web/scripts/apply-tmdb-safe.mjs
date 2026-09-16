@@ -40,7 +40,7 @@ async function main() {
   const db = createClient(need("NEXT_PUBLIC_SUPABASE_URL"), key, { auth: { autoRefreshToken: false, persistSession: false } });
   const token = need("TMDB_API_READ_ACCESS_TOKEN");
   const report = JSON.parse(await readFile(resolve(process.cwd(), "scripts/output/tmdb-hydration-last-run.json"), "utf8"));
-  const safeMovies = { "MOV-00001":1311031, "MOV-00028":18240, "MOV-00008":10228, "MOV-00009":12599, "MOV-00010":10991, "MOV-00011":12600, "MOV-00012":33875, "MOV-00013":36218, "MOV-00014":34065, "MOV-00015":34067, "MOV-00016":16808, "MOV-00017":25961, "MOV-00018":47292, "MOV-00019":39057, "MOV-00020":50087, "MOV-00021":115223, "MOV-00022":150213, "MOV-00023":227679, "MOV-00024":303903, "MOV-00025":350499, "MOV-00026":382190, "MOV-00027":436931 };
+  const safeMovies = { "MOV-00001":1311031, "MOV-00031":18240, "MOV-00008":10228, "MOV-00009":12599, "MOV-00010":10991, "MOV-00011":12600, "MOV-00012":33875, "MOV-00013":36218, "MOV-00014":34065, "MOV-00015":34067, "MOV-00016":16808, "MOV-00017":25961, "MOV-00018":47292, "MOV-00019":39057, "MOV-00020":50087, "MOV-00021":115223, "MOV-00022":150213, "MOV-00023":227679, "MOV-00024":303903, "MOV-00025":350499, "MOV-00026":382190, "MOV-00027":436931 };
   const safeSeries = { "SER-00001": 67882, "SER-00002": 61295, "SER-00003": 62715 };
   const [movies, series, seasons, episodes] = await Promise.all([
     db.from("movies").select("id,internal_code"), db.from("series").select("id,internal_code"),
