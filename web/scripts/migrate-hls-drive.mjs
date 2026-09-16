@@ -263,12 +263,13 @@ async function main() {
   if (options.code && !discovered.length) throw new Error(`No se encontró ${options.code} dentro de la fuente de Drive.`);
 
   const unmatched = discovered.filter((item) => !contentByCode.has(item.internalCode));
-  const candidates = discovered.filter((item) => {
+  const pending = discovered.filter((item) => {
     const content = contentByCode.get(item.internalCode);
     if (!content) return false;
     const existing = existingByContent.get(`${content.kind}:${content.id}`);
     return options.rescan || !(existing?.status === "ready" && existing.drive_root_folder_id === item.driveRootFolderId);
-  }).slice(0, options.limit);
+  });
+  const candidates = pending.slice(0, options.limit);
 
   const summary = {
     completed: [],
@@ -276,11 +277,12 @@ async function main() {
     dryRun: options.dryRun,
     failed: [],
     finishedAt: null,
-    skippedReady: discovered.length - unmatched.length - candidates.length,
+    pending: pending.length,
+    skippedReady: discovered.length - unmatched.length - pending.length,
     startedAt: timestamp(),
     unmatchedCodes: unmatched.map((item) => item.internalCode),
   };
-  console.log(`${timestamp()}  Encontrados ${discovered.length} paquetes; ${candidates.length} pendientes; ${summary.skippedReady} ya listos; ${unmatched.length} sin contenido en el catálogo.`);
+  console.log(`${timestamp()}  Encontrados ${discovered.length} paquetes; ${pending.length} pendientes (${candidates.length} seleccionados en esta ejecución); ${summary.skippedReady} ya listos; ${unmatched.length} sin contenido en el catálogo.`);
   if (options.dryRun || !candidates.length) {
     summary.finishedAt = timestamp();
     await writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
