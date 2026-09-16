@@ -103,6 +103,16 @@ async function createDriveClient() {
     return google.drive({ version: "v3", auth });
   }
 
+  const serviceAccountEmail = process.env.GOOGLE_CLIENT_EMAIL?.trim();
+  const serviceAccountKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
+  if (serviceAccountEmail && serviceAccountKey) {
+    const auth = new google.auth.GoogleAuth({
+      credentials: { client_email: serviceAccountEmail, private_key: serviceAccountKey },
+      scopes: [DRIVE_SCOPE],
+    });
+    return google.drive({ version: "v3", auth });
+  }
+
   const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim();
   if (refreshToken) {
     const client = new google.auth.OAuth2(
