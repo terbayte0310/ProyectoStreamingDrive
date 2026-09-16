@@ -30,6 +30,7 @@ function positiveInteger(value, fallback) {
 
 const options = {
   code: argument("--code"),
+  prefix: argument("--prefix"),
   concurrency: Math.min(8, positiveInteger(argument("--concurrency"), DEFAULT_CONCURRENCY)),
   dryRun: hasArgument("--dry-run"),
   limit: positiveInteger(argument("--limit"), Number.MAX_SAFE_INTEGER),
@@ -192,6 +193,12 @@ async function scanPackage(drive, packageFolderId) {
   const masters = assets.filter((asset) => asset.relative_path === "master.m3u8");
   if (masters.length !== 1) throw new Error("El paquete debe contener exactamente un master.m3u8 en su raíz.");
   if (!assets.some((asset) => asset.asset_kind === "media_playlist")) throw new Error("El paquete no contiene listas HLS de vídeo o audio.");
+  const masterReferences = Array.from((masters[0].playlist_body ?? "").matchAll(/URI="([^"]+)"/g), (match) => match[1]);
+  for (const reference of masterReferences) {
+    if (!assets.some((asset) => asset.relative_path === reference)) {
+      throw new Error(`master.m3u8 referencia ${reference}, pero ese archivo no está disponible en Drive.`);
+    }
+  }
   return assets;
 }
 
@@ -259,8 +266,8 @@ async function main() {
 
   console.log(`${timestamp()}  Descubriendo paquetes HLS en Drive…`);
   const allDiscovered = await discoverPackages(drive, rootFolderId);
-  const discovered = options.code ? allDiscovered.filter((item) => item.internalCode === options.code) : allDiscovered;
-  if (options.code && !discovered.length) throw new Error(`No se encontró ${options.code} dentro de la fuente de Drive.`);
+  const discovered = options.code ? allDiscovered.filter((item) => item.internalCode === options.code) : options.prefix ? allDiscovered.filter((item) => item.internalCode.startsWith(options.prefix)) : allDiscovered;
+  if ((options.code || options.prefix) && !discovered.length) throw new Error(`No se encontró el código solicitado dentro de la fuente de Drive.`);
 
   const unmatched = discovered.filter((item) => !contentByCode.has(item.internalCode));
   const pending = discovered.filter((item) => {
