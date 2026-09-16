@@ -23,7 +23,7 @@ type TmdbRequestResult = { payload: Record<string, unknown>; response: Response 
 
 async function requestTmdb(pathname: string, query: Record<string, string | undefined> = {}): Promise<TmdbRequestResult> {
   const config = getTmdbConfig();
-  const url = new URL(pathname, config.apiBaseUrl);
+  const url = new URL(pathname.replace(/^\//, ""), `${config.apiBaseUrl}/`);
   for (const [key, value] of Object.entries(query)) {
     if (value) url.searchParams.set(key, value);
   }
