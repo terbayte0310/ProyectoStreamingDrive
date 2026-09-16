@@ -217,7 +217,8 @@ async function inParallel(items, concurrency, operation) {
 }
 
 async function main() {
-  const rootFolderId = required("HLS_DRIVE_ROOT_FOLDER_ID");
+  const rootFolderId = process.env.HLS_DRIVE_ROOT_FOLDER_ID?.trim() || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim();
+  if (!rootFolderId) throw new Error("Falta HLS_DRIVE_ROOT_FOLDER_ID o GOOGLE_DRIVE_ROOT_FOLDER_ID en .env.local.");
   const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!supabaseSecretKey) throw new Error("Falta SUPABASE_SECRET_KEY (preferida) o SUPABASE_SERVICE_ROLE_KEY en .env.local.");
   const supabase = createClient(required("NEXT_PUBLIC_SUPABASE_URL"), supabaseSecretKey, { auth: { autoRefreshToken: false, persistSession: false } });
