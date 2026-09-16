@@ -3,7 +3,7 @@ import "server-only";
 import { getTmdbConfig } from "@/lib/tmdb/config";
 import { mapTmdbMetadata, type TmdbCachedMetadata, type TmdbMediaKind } from "@/lib/tmdb/metadata";
 
-const preferredLocales = ["es-PE", "es-ES"] as const;
+const preferredLocales = ["es-MX", "es-ES"] as const;
 
 export class TmdbClientError extends Error {
   constructor(message: string, readonly status: number) {

@@ -19,7 +19,7 @@ async function get(token, path, query = {}) {
 async function cache(token, kind, context) {
   const path = kind === "movie" ? "/movie/" + context.id : kind === "series" ? "/tv/" + context.id : kind === "season" ? "/tv/" + context.parent + "/season/" + context.season : "/tv/" + context.parent + "/season/" + context.season + "/episode/" + context.episode;
   let payload; let locale = "original"; let fallback = "original";
-  for (const [i, language] of ["es-PE", "es-ES"].entries()) {
+  for (const [i, language] of ["es-MX", "es-ES"].entries()) {
     payload = await get(token, path, { language });
     if ([payload.title, payload.name, payload.overview].some(str)) { locale = language; fallback = i ? language : null; break; }
   }
