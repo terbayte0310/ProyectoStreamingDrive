@@ -101,6 +101,7 @@ export function LessonNotes({ lessonId, readSecond, seekTo }: LessonNotesProps) 
 
       <form className="notes-form" onSubmit={addNote}>
         <input
+          aria-label="Nueva nota de la lección"
           className="notes-input"
           onChange={(event) => setBody(event.target.value)}
           placeholder="Añadir nota en el segundo actual…"

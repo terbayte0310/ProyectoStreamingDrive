@@ -1,11 +1,11 @@
 import type { CSSProperties } from "react";
 
 const palettes = [
-  ["#075dff", "#70ddff", "#d8ecff"],
-  ["#143dff", "#8c7dff", "#e7e4ff"],
-  ["#006eb8", "#12c2e9", "#d8f9ff"],
-  ["#0055cc", "#4d9fff", "#b9dcff"],
-  ["#1744a5", "#00a8ff", "#ebf7ff"],
+  ["#34452a", "#6c823e", "#d9ed8d"],
+  ["#413c4a", "#83708c", "#d6c1d8"],
+  ["#214644", "#408f85", "#b2e3ce"],
+  ["#493f32", "#9d8058", "#eed3a0"],
+  ["#283d38", "#658f75", "#c9e7bc"],
 ] as const;
 
 function hash(value: string) {

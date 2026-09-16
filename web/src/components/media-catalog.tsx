@@ -19,7 +19,7 @@ export type TmdbCatalogMetadata = {
 
 const moduleLinks: Array<{ href: string; label: string; module: LibraryModule }> = [
   { href: "/catalog/cursos", label: "Cursos", module: "courses" },
-  { href: "/catalog/movies", label: "Movies", module: "movies" },
+  { href: "/catalog/movies", label: "Películas", module: "movies" },
   { href: "/catalog/series", label: "Series", module: "series" },
 ];
 

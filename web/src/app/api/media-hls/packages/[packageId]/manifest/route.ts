@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { rewriteHlsPlaylist } from "@/lib/media/hls";
+import { rewriteHlsPlaylistForPackage } from "@/lib/media/hls";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -24,12 +24,13 @@ export async function GET(_request: NextRequest, context: RouteContext<"/api/med
   const { data: assets, error: assetsError } = await supabase
     .from("media_hls_assets")
     .select("id, relative_path, playlist_body, asset_kind")
-    .eq("package_id", packageRow.id);
+    .eq("package_id", packageRow.id)
+    .eq("is_active", true);
   if (assetsError || !assets) return noStoreJson({ error: "No se pudieron cargar los archivos del paquete." }, { status: 500 });
   const manifest = assets.find((asset) => asset.id === packageRow.manifest_asset_id);
   if (!manifest?.playlist_body || manifest.asset_kind !== "master_playlist") {
     return noStoreJson({ error: "El manifiesto HLS no está listo." }, { status: 409 });
   }
-  const body = rewriteHlsPlaylist(manifest.playlist_body, manifest.relative_path, assets);
+  const body = rewriteHlsPlaylistForPackage(manifest.playlist_body, manifest.relative_path, assets, packageRow.id);
   return new NextResponse(body, { headers: { "cache-control": "private, no-store", "content-type": "application/vnd.apple.mpegurl; charset=utf-8" } });
 }

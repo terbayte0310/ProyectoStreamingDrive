@@ -1,0 +1,33 @@
+{
+  "passed": [
+    "search accents",
+    "empty state",
+    "clear filters",
+    "categories",
+    "sort",
+    "theme",
+    "play",
+    "pause",
+    "speed",
+    "escape",
+    "mute",
+    "keyboard mute",
+    "native fallback",
+    "responsive"
+  ],
+  "layouts": [
+    {
+      "width": 390,
+      "scroll": 390
+    },
+    {
+      "width": 768,
+      "scroll": 768
+    },
+    {
+      "width": 1440,
+      "scroll": 1440
+    }
+  ],
+  "errors": []
+}

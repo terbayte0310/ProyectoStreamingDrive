@@ -86,19 +86,34 @@ export async function POST(request: NextRequest) {
     return noStoreJson({ code: "invalid_request", error: "La solicitud de transferencia no es válida." }, { status: 400 });
   }
 
-  const { data: item, error: itemError } = await supabase
+  const { data: courseItem, error: courseItemError } = await supabase
     .from("drive_items")
     .select("byte_size")
     .eq("drive_file_id", body.fileId)
     .eq("status", "available")
     .limit(1)
     .maybeSingle<{ byte_size: number | null }>();
-  if (itemError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
-  if (!item) return noStoreJson({ code: "file_not_allowed", error: "El archivo no pertenece a la biblioteca disponible." }, { status: 403 });
+  if (courseItemError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
+
+  // Los segmentos HLS no forman parte del inventario de Cursos. Su política
+  // RLS comprueba el módulo y el contenido antes de permitir la lectura.
+  const { data: mediaAsset, error: mediaAssetError } = courseItem
+    ? { data: null, error: null }
+    : await supabase
+      .from("media_hls_assets")
+      .select("byte_size")
+      .eq("drive_file_id", body.fileId)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle<{ byte_size: number | null }>();
+  if (mediaAssetError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
+
+  const byteSize = courseItem?.byte_size ?? mediaAsset?.byte_size;
+  if (byteSize === undefined) return noStoreJson({ code: "file_not_allowed", error: "El archivo no pertenece a la biblioteca disponible." }, { status: 403 });
 
   let requestBytes: number;
   try {
-    requestBytes = calculateTransferBytes(body.kind as TransferKind, body.range as string | null, Number(item.byte_size));
+    requestBytes = calculateTransferBytes(body.kind as TransferKind, body.range as string | null, Number(byteSize));
   } catch (error) {
     const message = error instanceof TransferRangeError ? error.message : "No se pudo calcular la transferencia.";
     return noStoreJson({ code: "invalid_range", error: message }, { status: 416 });

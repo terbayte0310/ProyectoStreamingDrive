@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { CatalogCollection } from "@/components/catalog-collection";
 import { AppHeader } from "@/components/app-header";
 import { CourseCover } from "@/components/course-cover";
 import { CatalogModuleNavigation } from "@/components/media-catalog";
+import { readMonotonicTime } from "@/lib/server-timing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Profile = { email: string; is_authorized: boolean; role: "admin" | "reader" };
@@ -70,15 +72,26 @@ function CourseCard({ course }: { course: CourseView }) {
 export const dynamic = "force-dynamic";
 
 export default async function CatalogPage({ forceCourses = false, searchParams }: { forceCourses?: boolean; searchParams: Promise<{ access?: string }> }) {
+  const startedAt = readMonotonicTime();
   const { access: accessNotice } = await searchParams;
   const supabase = await createSupabaseServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) redirect("/signin");
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const claimsDuration = readMonotonicTime() - startedAt;
+  const userId = claimsData?.claims.sub;
+  if (claimsError || !userId) redirect("/signin");
 
-  const { data: profile } = await supabase.from("profiles").select("email, is_authorized, role").eq("id", userData.user.id).maybeSingle<Profile>();
+  const [profileResult, moduleResult, catalogResult] = await Promise.all([
+    supabase.from("profiles").select("email, is_authorized, role").eq("id", userId).maybeSingle<Profile>(),
+    supabase.rpc("get_my_module_access"),
+    supabase.rpc("get_catalog_home"),
+  ]);
+  const totalDuration = readMonotonicTime() - startedAt;
+  console.info(
+    `[startup-performance] catalog claims_ms=${claimsDuration.toFixed(1)} data_ms=${(totalDuration - claimsDuration).toFixed(1)} total_ms=${totalDuration.toFixed(1)} alg=${claimsData?.header.alg ?? "none"}`,
+  );
+  const profile = profileResult.data;
   if (!profile?.is_authorized) redirect("/dashboard");
 
-  const moduleResult = await supabase.rpc("get_my_module_access");
   if (moduleResult.error) {
     return <main className="app-shell grid min-h-screen place-items-center"><div className="status-card">No se pudieron comprobar los módulos asignados.</div></main>;
   }
@@ -91,12 +104,11 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
     if (modules.has("movies")) redirect("/catalog/movies");
     if (modules.has("series")) redirect("/catalog/series");
   }
-  const catalogResult = hasCourses ? await supabase.rpc("get_catalog_home") : { data: [], error: null };
-  if (catalogResult.error) {
+  if (hasCourses && catalogResult.error) {
     return <main className="app-shell grid min-h-screen place-items-center"><div className="status-card">No se pudo cargar el catálogo todavía.</div></main>;
   }
 
-  const courseViews: CourseView[] = ((catalogResult.data ?? []) as CatalogHomeRow[]).map((course) => {
+  const courseViews: CourseView[] = ((hasCourses ? catalogResult.data ?? [] : []) as CatalogHomeRow[]).map((course) => {
     const completed = Number(course.completed_lesson_count);
     const lessonCount = Number(course.lesson_count);
     return {
@@ -152,7 +164,7 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
               <div className="hero-meta"><span className="meta-pill">{featured.category}</span><span className="meta-pill">{featured.lessonCount} lecciones</span><span className="meta-pill">{featured.percent}% completado</span>{featured.platform ? <span className="meta-pill">{featured.platform}</span> : null}</div>
               <div className="hero-actions">{featured.destinationId ? <Link className="primary-button" href={`/course-player?lesson=${featured.destinationId}`}><span aria-hidden="true">▶</span> {featured.resumable ? "Continuar viendo" : "Comenzar curso"}</Link> : null}<a className="secondary-button" href="#biblioteca">Explorar biblioteca</a></div>
             </div>
-            <div aria-hidden="true" className="hero-art"><CourseCover category={featured.category} coverUrl={featured.cover_url} title={titleOf(featured)} /></div>
+            <div aria-hidden="true" className="hero-art"><CourseCover priority category={featured.category} coverUrl={featured.cover_url} title={titleOf(featured)} /></div>
           </section>
         ) : null}
 
@@ -160,15 +172,7 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
           <section className="section-block" id="continuar"><div className="section-heading"><div><h2>Continúa donde lo dejaste</h2><p>Tu progreso más reciente, listo para reproducir.</p></div></div><div className="course-rail">{continueWatching.map((course) => <CourseCard course={course} key={course.id} />)}</div></section>
         ) : null}
 
-        <div id="biblioteca">
-          {Array.from(new Map(courseViews.filter((course) => course.category_id).map((course) => [course.category_id!, course.category])).entries()).map(([categoryId, categoryTitle]) => {
-            const categoryCourses = courseViews.filter((course) => course.category_id === categoryId);
-            if (!categoryCourses.length) return null;
-            return <section className="section-block" key={categoryId}><div className="section-heading"><div><h2>{categoryTitle}</h2><p>{categoryCourses.length} {categoryCourses.length === 1 ? "curso" : "cursos"}</p></div></div><div className="course-rail">{categoryCourses.map((course) => <CourseCard course={course} key={course.id} />)}</div></section>;
-          })}
-          {courseViews.some((course) => !course.category_id) ? <section className="section-block"><div className="section-heading"><div><h2>Más de tu biblioteca</h2></div></div><div className="course-rail">{courseViews.filter((course) => !course.category_id).map((course) => <CourseCard course={course} key={course.id} />)}</div></section> : null}
-          {!courseViews.length ? <div className="status-card">Todavía no hay cursos importados.</div> : null}
-        </div>
+        <CatalogCollection kind="courses" entries={courseViews.map(course => ({ id: course.id, title: titleOf(course), category: course.category, content: <CourseCard course={course} key={course.id} /> }))} />
         </> : null}
       </main>
     </div>

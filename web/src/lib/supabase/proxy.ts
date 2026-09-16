@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSupabaseSession(request: NextRequest) {
+  const startedAt = performance.now();
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -20,6 +21,13 @@ export async function updateSupabaseSession(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getClaims();
+  const claimsResult = await supabase.auth.getClaims();
+  const authDuration = performance.now() - startedAt;
+  response.headers.append("server-timing", `supabase-auth;dur=${authDuration.toFixed(1)}`);
+  if (request.headers.get("sec-fetch-dest") === "document") {
+    console.info(
+      `[startup-performance] proxy path=${request.nextUrl.pathname} auth_ms=${authDuration.toFixed(1)} alg=${claimsResult.data?.header.alg ?? "none"}`,
+    );
+  }
   return response;
 }

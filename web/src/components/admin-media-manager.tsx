@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { MediaInventoryImport } from "@/components/media-inventory-import";
+import { PublishReadyMedia } from "@/components/publish-ready-media";
 
 type MediaKind = "movie" | "series" | "season" | "episode";
 type MediaStatus = "draft" | "published";
@@ -79,12 +81,20 @@ export function AdminMediaManager({
 
   useEffect(() => {
     void (async () => {
-      const response = await fetch("/api/admin/media-playback", { cache: "no-store" });
+      const response = await fetch("/api/drive-token/media-playback", { cache: "no-store" });
       const result = await response.json().catch(() => ({})) as { packages?: PlaybackPackage[]; sources?: PlaybackSource[] };
       if (response.ok) { setPlaybackSources(result.sources ?? []); setPlaybackPackages(result.packages ?? []); }
     })();
   }, []);
 
+  async function loadPlaybackConfiguration() {
+    const response = await fetch("/api/drive-token/media-playback", { cache: "no-store" });
+    const result = await response.json().catch(() => ({})) as { packages?: PlaybackPackage[]; sources?: PlaybackSource[] };
+    if (response.ok) {
+      setPlaybackSources(result.sources ?? []);
+      setPlaybackPackages(result.packages ?? []);
+    }
+  }
   const selected = useMemo(() => {
     if (!selection) return null;
     if (selection.kind === "movie") return movies.find((item) => item.id === selection.id) ?? null;
@@ -251,7 +261,7 @@ export function AdminMediaManager({
     const form = new FormData(event.currentTarget);
     setBusy("playback-source"); setMessage("");
     try {
-      const response = await fetch("/api/admin/media-playback", { body: JSON.stringify({ action: "create-source", driveRootFolderId: form.get("driveRootFolderId"), name: form.get("name") }), headers: { "Content-Type": "application/json" }, method: "POST" });
+      const response = await fetch("/api/drive-token/media-playback", { body: JSON.stringify({ action: "create-source", driveRootFolderId: form.get("driveRootFolderId"), name: form.get("name") }), headers: { "Content-Type": "application/json" }, method: "POST" });
       const result = await response.json() as { error?: string; source?: PlaybackSource };
       if (!response.ok || !result.source) throw new Error(result.error ?? "No se pudo guardar la fuente.");
       setPlaybackSources((current) => [...current, result.source!]); event.currentTarget.reset(); setMessage("Fuente de Drive guardada.");
@@ -264,7 +274,7 @@ export function AdminMediaManager({
     const form = new FormData(event.currentTarget);
     setBusy("playback-scan"); setMessage("");
     try {
-      const response = await fetch("/api/admin/media-playback", { body: JSON.stringify({ action: "scan", contentId: selection.id, contentKind: selection.kind, driveRootFolderId: form.get("driveRootFolderId"), sourceId: form.get("sourceId") }), headers: { "Content-Type": "application/json" }, method: "POST" });
+      const response = await fetch("/api/drive-token/media-playback", { body: JSON.stringify({ action: "scan", contentId: selection.id, contentKind: selection.kind, driveRootFolderId: form.get("driveRootFolderId"), sourceId: form.get("sourceId") }), headers: { "Content-Type": "application/json" }, method: "POST" });
       const result = await response.json() as { error?: string; packageId?: string; scannedAssets?: number; status?: PlaybackPackage["status"] };
       if (!response.ok || !result.packageId || !result.status) throw new Error(result.error ?? "No se pudo escanear el paquete HLS.");
       const relation = selection.kind === "movie" ? { movie_id: selection.id } : { episode_id: selection.id };
@@ -273,6 +283,61 @@ export function AdminMediaManager({
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo escanear el paquete HLS."); } finally { setBusy(""); }
   }
 
+  async function scanPendingPlaybackPackages(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const sourceId = String(form.get("sourceId") ?? "");
+    if (!sourceId) return;
+
+    setBusy("playback-batch");
+    setMessage("");
+    let scannedCount = 0;
+    let scannedAssets = 0;
+    let remaining = 0;
+    let failures = 0;
+    let missingContent = 0;
+    let duplicates = 0;
+
+    try {
+      do {
+        const response = await fetch("/api/admin/media-playback/batch", {
+          body: JSON.stringify({ sourceId }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        const result = await response.json().catch(() => ({})) as {
+          duplicateCodes?: string[];
+          error?: string;
+          errors?: Array<{ internalCode: string; message: string }>;
+          missingContentCodes?: string[];
+          remaining?: number;
+          scanned?: Array<{ assets: number; internalCode: string }>;
+        };
+        if (!response.ok) throw new Error(result.error ?? "No se pudo sincronizar los paquetes pendientes.");
+
+        const currentScanned = result.scanned ?? [];
+        scannedCount += currentScanned.length;
+        scannedAssets += currentScanned.reduce((total, item) => total + item.assets, 0);
+        failures += result.errors?.length ?? 0;
+        missingContent = result.missingContentCodes?.length ?? 0;
+        duplicates = result.duplicateCodes?.length ?? 0;
+        remaining = result.remaining ?? 0;
+        if (!currentScanned.length) break;
+      } while (remaining > 0);
+
+      await loadPlaybackConfiguration();
+      const notes = [
+        failures ? `${failures} con error` : "",
+        missingContent ? `${missingContent} sin contenido registrado` : "",
+        duplicates ? `${duplicates} códigos duplicados en Drive` : "",
+      ].filter(Boolean);
+      setMessage(`Sincronización terminada: ${scannedCount} paquetes y ${scannedAssets} archivos registrados.${notes.length ? ` Revisión: ${notes.join(", ")}.` : ""}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudieron sincronizar los paquetes pendientes.");
+    } finally {
+      setBusy("");
+    }
+  }
   const meta = currentMetadata();
   const isSeriesDraft = selection?.kind === "season" || selection?.kind === "episode"
     ? series.find((item) => item.id === activeSeriesId)?.status === "draft"
@@ -305,6 +370,8 @@ export function AdminMediaManager({
       </aside>
 
       <div className="flex min-w-0 flex-col gap-6">
+        <MediaInventoryImport sources={playbackSources} />
+        <PublishReadyMedia sources={playbackSources} />
         {selected ? (
           <>
             <form className="admin-panel p-6" key={selection?.kind + ":" + selected.id} onSubmit={saveRecord}>
@@ -331,7 +398,7 @@ export function AdminMediaManager({
               <p className="mt-4 text-xs text-slate-500">Datos e imágenes proporcionados por TMDB. Esta aplicación no está respaldada ni certificada por TMDB.</p>
             </section>
 
-            {supportsPlayback ? <section className="admin-panel p-6"><div><p className="eyebrow">Reproducción</p><h2 className="mt-1 text-xl font-semibold">Paquete HLS en Drive</h2><p className="mt-2 text-sm text-slate-500">Usa una carpeta con <code>master.m3u8</code>, listas de vídeo/audio y subtítulos. El escaneo registra los archivos sin publicar enlaces directos.</p></div>{playbackPackage ? <p className={"mt-4 rounded-lg px-3 py-2 text-sm " + (playbackPackage.status === "ready" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>Estado: <strong>{playbackPackage.status}</strong>{playbackPackage.last_error ? ` · ${playbackPackage.last_error}` : ""}</p> : <p className="mt-4 text-sm text-slate-500">Aún no hay paquete vinculado.</p>}<form className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void scanPlaybackPackage(event)}><select className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue="" name="sourceId" required><option disabled value="">Fuente de Drive</option>{playbackSources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select><input className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue={playbackPackage?.drive_root_folder_id ?? ""} name="driveRootFolderId" placeholder="ID de carpeta del paquete HLS" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy) || !playbackSources.some((source) => source.is_active)} type="submit">{busy === "playback-scan" ? "Escaneando…" : playbackPackage ? "Reescanear" : "Vincular y escanear"}</button></form>{!playbackSources.length ? <form className="mt-5 grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void createPlaybackSource(event)}><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="name" placeholder="Nombre de fuente, p. ej. Medios" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="driveRootFolderId" placeholder="ID de carpeta raíz de Drive" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} type="submit">{busy === "playback-source" ? "Guardando…" : "Guardar fuente"}</button></form> : null}</section> : null}
+            {supportsPlayback ? <section className="admin-panel p-6"><div><p className="eyebrow">Reproducción</p><h2 className="mt-1 text-xl font-semibold">Paquete HLS en Drive</h2><p className="mt-2 text-sm text-slate-500">Usa una carpeta con <code>master.m3u8</code>, listas de vídeo/audio y subtítulos. El escaneo registra los archivos sin publicar enlaces directos.</p></div>{playbackPackage ? <p className={"mt-4 rounded-lg px-3 py-2 text-sm " + (playbackPackage.status === "ready" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>Estado: <strong>{playbackPackage.status}</strong>{playbackPackage.last_error ? ` · ${playbackPackage.last_error}` : ""}</p> : <p className="mt-4 text-sm text-slate-500">Aún no hay paquete vinculado.</p>}<form className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void scanPlaybackPackage(event)}><select className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue="" name="sourceId" required><option disabled value="">Fuente de Drive</option>{playbackSources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select><input className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue={playbackPackage?.drive_root_folder_id ?? ""} name="driveRootFolderId" placeholder="ID de carpeta del paquete HLS" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy) || !playbackSources.some((source) => source.is_active)} type="submit">{busy === "playback-scan" ? "Escaneando…" : playbackPackage ? "Reescanear" : "Vincular y escanear"}</button></form><form className="mt-3 flex flex-wrap gap-3 border-t border-slate-200 pt-4" onSubmit={(event) => void scanPendingPlaybackPackages(event)}><select className="min-w-64 rounded-xl border border-slate-300 px-3 py-2" defaultValue="" name="sourceId" required><option disabled value="">Fuente de Drive para sincronizar</option>{playbackSources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select><button className="rounded-xl border border-slate-300 px-4 py-2 font-semibold disabled:opacity-50" disabled={busy === "playback-batch" || !playbackSources.length} type="submit">{busy === "playback-batch" ? "Sincronizando paquetes…" : "Sincronizar paquetes pendientes"}</button><p className="basis-full text-xs text-slate-500">Busca carpetas con códigos internos exactos. Vincula solo contenido existente, no publica nada y procesa grupos seguros hasta terminar.</p></form>{!playbackSources.length ? <form className="mt-5 grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void createPlaybackSource(event)}><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="name" placeholder="Nombre de fuente, p. ej. Medios" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="driveRootFolderId" placeholder="ID de carpeta raíz de Drive" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} type="submit">{busy === "playback-source" ? "Guardando…" : "Guardar fuente"}</button></form> : null}</section> : null}
 
             {selection?.kind === "series" ? <section className="admin-panel p-6"><div className="flex items-center justify-between gap-3"><div><p className="eyebrow">Estructura</p><h2 className="mt-1 text-xl font-semibold">Temporadas y episodios</h2></div>{busy === "load:" + selected.id ? <span className="text-sm text-slate-500">Cargando…</span> : null}</div><form className="mt-4 flex flex-wrap gap-2" onSubmit={(event) => void createRecord(event, "season", selected.id)}><input className="admin-input min-w-56 flex-1 rounded-lg border px-3 py-2 text-sm" name="title" placeholder="Título de nueva temporada" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código opcional" /><input name="status" type="hidden" value="draft" /><button className="secondary-button text-sm" type="submit">Añadir temporada</button></form><div className="mt-4 grid gap-3">{seasons.map((season) => <div className="rounded-xl border border-slate-200 p-4" key={season.id}><button className="font-semibold" onClick={() => choose("season", season.id)} type="button">T{season.season_number}: {titleFor(season)}</button><span className="ml-2 text-xs text-slate-500">{statusLabel(season.status)}</span><div className="mt-3 grid gap-2 border-l-2 border-blue-100 pl-3">{episodes.filter((episode) => episode.season_id === season.id).map((episode) => <button className="text-left text-sm text-slate-600 hover:text-blue-600" key={episode.id} onClick={() => choose("episode", episode.id)} type="button">E{episode.episode_number}: {titleFor(episode)} · {statusLabel(episode.status)}</button>)}</div><form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => void createRecord(event, "episode", season.id)}><input className="admin-input min-w-48 flex-1 rounded-lg border px-3 py-2 text-sm" name="title" placeholder="Título de nuevo episodio" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código opcional" /><input name="status" type="hidden" value="draft" /><button className="secondary-button text-sm" type="submit">Añadir episodio</button></form></div>)}</div></section> : null}
           </>

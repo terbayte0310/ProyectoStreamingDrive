@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { CinemaPlayer } from "@/components/cinema-player";
 import { AppHeader } from "@/components/app-header";
 import { CourseResources } from "@/components/course-resources";
 import { LessonNotes } from "@/components/lesson-notes";
@@ -29,7 +30,7 @@ type Section = {
 };
 
 type PlayerState = "error" | "loading" | "needs-drive" | "ready";
-const workerRevision = "budget-v1";
+const workerRevision = "media-hls-v1";
 
 async function getDriveWorker() {
   const registration = await navigator.serviceWorker.register(
@@ -73,6 +74,7 @@ export default function CoursePlayerContent() {
   const lastSavedAt = useRef(0);
   const [state, setState] = useState<PlayerState>("loading");
   const [error, setError] = useState("");
+  const [progressError, setProgressError] = useState("");
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [courseComplete, setCourseComplete] = useState(false);
@@ -87,39 +89,51 @@ export default function CoursePlayerContent() {
     let cancelled = false;
 
     async function prepare() {
+      const startedAt = performance.now();
       setState("loading");
       setError("");
       setCourseComplete(false);
       lastSavedAt.current = 0;
       try {
-        const db = createSupabaseBrowserClient();
-        const { data: userData, error: userError } = await db.auth.getUser();
-        if (userError) throw new Error("No se pudo comprobar tu sesión.");
-        if (!userData.user) {
-          router.replace("/signin");
-          return;
-        }
-        const { data: hasCourses, error: accessError } = await db.rpc("has_module_access", { p_module: "courses" });
-        if (accessError) throw new Error("No se pudo comprobar el acceso al curso.");
-        if (!hasCourses) {
-          router.replace("/catalog?access=course-denied");
-          return;
-        }
         if (!requestedLessonId) {
           router.replace("/catalog");
           return;
         }
 
-        const { data: requestedLesson, error: requestedError } = await db
-          .from("lessons")
-          .select("course_id")
-          .eq("id", requestedLessonId)
-          .eq("is_visible", true)
-          .maybeSingle<{ course_id: string }>();
+        const db = createSupabaseBrowserClient();
+        // These requests do not depend on one another. Starting them together
+        // removes two browser-to-Supabase round trips from player startup.
+        const [userResult, accessResult, requestedResult] = await Promise.all([
+          db.auth.getUser(),
+          db.rpc("has_module_access", { p_module: "courses" }),
+          db
+            .from("lessons")
+            .select("course_id")
+            .eq("id", requestedLessonId)
+            .eq("is_visible", true)
+            .maybeSingle<{ course_id: string }>(),
+        ]);
+        const { data: userData, error: userError } = userResult;
+        if (userError) throw new Error("No se pudo comprobar tu sesión.");
+        if (!userData.user) {
+          router.replace("/signin");
+          return;
+        }
+        const { data: hasCourses, error: accessError } = accessResult;
+        if (accessError) throw new Error("No se pudo comprobar el acceso al curso.");
+        if (!hasCourses) {
+          router.replace("/catalog?access=course-denied");
+          return;
+        }
+        const { data: requestedLesson, error: requestedError } = requestedResult;
         if (requestedError) throw new Error("No se pudo consultar la lección solicitada.");
         if (!requestedLesson) throw new Error("La lección solicitada no existe o no está visible.");
+        const identityDuration = performance.now() - startedAt;
 
-        const [lessonResult, sectionResult] = await Promise.all([
+        // Once access is confirmed, the outline, Drive token and service worker
+        // can all load in parallel.
+        const bootstrapStartedAt = performance.now();
+        const [lessonResult, sectionResult, worker, tokenResponse] = await Promise.all([
           db
             .from("lessons")
             .select("id, course_id, detected_title, custom_title, section_id, drive_item_id, position")
@@ -133,6 +147,8 @@ export default function CoursePlayerContent() {
             .eq("is_detected_section", true)
             .eq("is_visible", true)
             .order("position"),
+          getDriveWorker(),
+          fetch("/api/drive-token", { cache: "no-store" }),
         ]);
         if (lessonResult.error || sectionResult.error) {
           throw new Error("No se pudo cargar la estructura del curso.");
@@ -146,15 +162,14 @@ export default function CoursePlayerContent() {
         const active = ordered.find((lesson) => lesson.id === requestedLessonId);
         if (!active?.drive_item_id) throw new Error("No hay un archivo reproducible para esta lección.");
 
+        // Keep this direct lookup: the embedded PostgREST relation can be
+        // hidden by RLS even when the lesson itself is readable.
         const { data: item, error: itemError } = await db
           .from("drive_items")
           .select("drive_file_id")
           .eq("id", active.drive_item_id)
           .maybeSingle<{ drive_file_id: string }>();
         if (itemError || !item) throw new Error("No se encontró el archivo de Drive de esta lección.");
-
-        const worker = await getDriveWorker();
-        const tokenResponse = await fetch("/api/drive-token", { cache: "no-store" });
         if (tokenResponse.status === 401) {
           if (!cancelled) setState("needs-drive");
           return;
@@ -164,6 +179,9 @@ export default function CoursePlayerContent() {
         worker.postMessage({ token: accessToken, type: "drive-access-token" });
 
         if (!cancelled) {
+          console.info(
+            `[player-performance] identity_ms=${identityDuration.toFixed(1)} bootstrap_ms=${(performance.now() - bootstrapStartedAt).toFixed(1)} ready_ms=${(performance.now() - startedAt).toFixed(1)}`,
+          );
           setFileId(item.drive_file_id);
           setLessons(ordered);
           setSelectedId(active.id);
@@ -191,7 +209,7 @@ export default function CoursePlayerContent() {
   const title = selected ? selected.custom_title ?? selected.detected_title : "";
   async function saveProgress(seconds: number, duration: number, completed = false) {
     if (!selectedId || !userId || !Number.isFinite(duration)) return;
-    await createSupabaseBrowserClient().from("lesson_progress").upsert({
+    const { error: saveError } = await createSupabaseBrowserClient().from("lesson_progress").upsert({
       completed_at: completed ? new Date().toISOString() : null,
       duration_seconds: Math.round(duration),
       lesson_id: selectedId,
@@ -199,6 +217,7 @@ export default function CoursePlayerContent() {
       state: completed ? "completed" : "in_progress",
       user_id: userId,
     });
+    setProgressError(saveError ? "No se pudo guardar tu avance. Comprueba tu conexión antes de cambiar de lección." : "");
   }
 
   async function restoreProgress() {
@@ -285,9 +304,9 @@ export default function CoursePlayerContent() {
           {state === "ready" && fileId ? (
             <>
               <div className="video-shell">
-                <video
+                <CinemaPlayer
+                  title={title}
                   autoPlay={shouldAutoplay}
-                  controls
                   onEnded={() => void playNext()}
                   onLoadedMetadata={() => void restoreProgress()}
                   onPause={() => void saveCurrentPosition()}
@@ -300,7 +319,7 @@ export default function CoursePlayerContent() {
                   }}
                   playsInline
                   preload="metadata"
-                  ref={videoRef}
+                  videoRef={videoRef}
                   src={`/drive-stream/${fileId}`}
                 />
               </div>
@@ -309,10 +328,11 @@ export default function CoursePlayerContent() {
                 <button className="primary-button" disabled={!next} onClick={() => next && void selectLesson(next.id)} type="button">Siguiente →</button>
                 <button className="secondary-button" disabled={downloading} onClick={() => void download()} type="button">{downloading ? "Preparando…" : "↓ Descargar"}</button>
               </div>
+              {progressError ? <p className="auth-message" role="status">{progressError}</p> : null}
               {downloadError ? <p className="auth-message">{downloadError}</p> : null}
               {courseComplete ? <div className="status-card"><strong>Curso completado</strong><p className="muted mt-1">Buen trabajo. Tu progreso quedó guardado.</p></div> : null}
               {selected ? <CourseResources courseId={selected.course_id} /> : null}
-              {selectedId ? <LessonNotes lessonId={selectedId} readSecond={() => videoRef.current?.currentTime ?? 0} seekTo={(seconds) => { if (videoRef.current) videoRef.current.currentTime = seconds; }} /> : null}
+              {selectedId ? <LessonNotes key={selectedId} lessonId={selectedId} readSecond={() => videoRef.current?.currentTime ?? 0} seekTo={(seconds) => { if (videoRef.current) videoRef.current.currentTime = seconds; }} /> : null}
             </>
           ) : null}
         </section>

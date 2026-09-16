@@ -10,22 +10,6 @@ import { buildGoogleSignInOptions } from "@/lib/auth/google-oauth";
 import { completeSignOut } from "@/lib/auth/sign-out-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-const ascii = String.raw`
-             .         *          .
-        *        ╭──────────╮             .
-   .          ╭─┤  LEARN   ├─╮       *
-       ╭──────┘ ╰──────────╯ └──────╮
-       │    +    +    +    +    +   │
-  *    │  +   ╭────────────╮  +     │   .
-       │    + │  01 10 01  │    +   │
-       │  +   │  PLAY  ▶   │ +      │
-   .   │    + ╰────────────╯    +   │
-       ╰────────────┬───────────────╯
-             .      │       *
-                  ──┴──                 .
-      *       YOUR NEXT CHAPTER
-`;
-
 export default function SignInPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +27,7 @@ export default function SignInPage() {
       .then(({ data, error }) => {
         window.clearTimeout(timeout);
         setUser(data.user);
-        if (error) setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
+        if (error && error.name !== "AuthSessionMissingError") setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
       })
       .catch(() => {
         window.clearTimeout(timeout);
@@ -100,13 +84,13 @@ export default function SignInPage() {
     <main className="login-page">
       <section className="login-visual">
         <Brand />
-        <pre aria-hidden="true" className="ascii-art">{ascii}</pre>
+        <div aria-hidden="true" className="login-cinema-art"><div className="login-film-frame">N<span>01 / TU PRÓXIMA HISTORIA</span></div><div className="login-orbit" /></div>
         <div className="login-copy">
           <p className="eyebrow">Tu biblioteca privada</p>
-          <h2 className="display-title">Aprende a tu ritmo.</h2>
-          <p>Cursos, avance y notas en un espacio diseñado para entrar, concentrarte y continuar exactamente donde estabas.</p>
+          <h2 className="display-title">Dale play a tu mundo.</h2>
+          <p>Películas para desconectar. Series para quedarte. Cursos para ir más lejos. Todo en tu biblioteca privada.</p>
         </div>
-        <p className="muted">Nébula · Un espacio, todo tu aprendizaje.</p>
+        <p className="muted">NÉBULA / Historias. Ideas. Nuevos comienzos.</p>
       </section>
 
       <section className="login-panel">

@@ -110,3 +110,30 @@ export async function scanHlsPackage(accessToken: string, rootFolderId: string) 
   if (!assets.some((asset) => asset.asset_kind === "media_playlist")) throw new MediaDriveError("El paquete no contiene listas HLS de vídeo o audio.");
   return assets;
 }
+export type DiscoveredHlsPackageFolder = {
+  driveRootFolderId: string;
+  internalCode: string;
+};
+
+const movieCodePattern = /^MOV-[0-9]{5,}$/;
+const episodeCodePattern = /^SER-[0-9]{5,}-S[0-9]{2}-E[0-9]{2,3}$/;
+const seriesCodePattern = /^SER-[0-9]{5,}$/;
+
+export async function discoverHlsPackageFolders(accessToken: string, sourceFolderId: string) {
+  const packages: DiscoveredHlsPackageFolder[] = [];
+  const rootNodes = await listFolder(accessToken, sourceFolderId);
+  for (const node of rootNodes) {
+    if (node.mimeType !== folderMimeType) continue;
+    if (movieCodePattern.test(node.name) || episodeCodePattern.test(node.name)) {
+      packages.push({ driveRootFolderId: node.id, internalCode: node.name });
+      continue;
+    }
+    if (!seriesCodePattern.test(node.name)) continue;
+    for (const episodeNode of await listFolder(accessToken, node.id)) {
+      if (episodeNode.mimeType === folderMimeType && episodeCodePattern.test(episodeNode.name)) {
+        packages.push({ driveRootFolderId: episodeNode.id, internalCode: episodeNode.name });
+      }
+    }
+  }
+  return packages;
+}

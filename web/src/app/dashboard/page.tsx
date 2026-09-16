@@ -30,7 +30,7 @@ export default function DashboardPage() {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       const user = userData.user;
 
-      if (userError) {
+      if (userError && userError.name !== "AuthSessionMissingError") {
         setView({ kind: "error", message: userError.message });
         return;
       }

@@ -7,10 +7,11 @@ export type AccessProfile = { email: string; is_authorized: boolean; role: "admi
 
 export async function getCurrentAccess() {
   const supabase = await createSupabaseServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return null;
-  const { data: profile } = await supabase.from("profiles").select("email, role, is_authorized").eq("id", userData.user.id).maybeSingle<AccessProfile>();
-  return { user: userData.user, profile };
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims.sub;
+  if (claimsError || !userId) return null;
+  const { data: profile } = await supabase.from("profiles").select("email, role, is_authorized").eq("id", userId).maybeSingle<AccessProfile>();
+  return { user: { id: userId }, profile };
 }
 
 export async function requireAuthorizedAccess() {

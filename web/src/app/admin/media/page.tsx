@@ -27,7 +27,7 @@ export default async function AdminMediaPage() {
       <AppHeader email={access.profile.email} showNavigation={false} />
       <main className="admin-main page-width">
         <section className="admin-hero admin-reveal">
-          <div><p className="eyebrow">Control de medios</p><h1>Movies y Series.</h1><p>Crea la estructura interna, controla publicación y vincula los metadatos que se conservarán en tu propia base de datos.</p></div>
+          <div><p className="eyebrow">Control de medios</p><h1>Películas y Series.</h1><p>Crea la estructura interna, controla publicación y vincula los metadatos que se conservarán en tu propia base de datos.</p></div>
           <div className="admin-hero-actions"><div className="admin-stat"><strong>{movies.length}</strong><span>Movies</span></div><div className="admin-stat"><strong>{series.length}</strong><span>Series</span></div><Link className="secondary-button" href="/admin">Administrar cursos <span aria-hidden="true">↗</span></Link></div>
         </section>
         {error ? <p className="admin-alert admin-alert-error">No se pudo cargar el catálogo de medios.</p> : <AdminMediaManager initialMetadata={metadata} initialMovies={movies} initialSeries={series} />}
