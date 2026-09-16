@@ -218,7 +218,9 @@ async function inParallel(items, concurrency, operation) {
 
 async function main() {
   const rootFolderId = required("HLS_DRIVE_ROOT_FOLDER_ID");
-  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();`n  if (!supabaseSecretKey) throw new Error("Falta SUPABASE_SECRET_KEY (preferida) o SUPABASE_SERVICE_ROLE_KEY en .env.local.");`n  const supabase = createClient(required("NEXT_PUBLIC_SUPABASE_URL"), supabaseSecretKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseSecretKey) throw new Error("Falta SUPABASE_SECRET_KEY (preferida) o SUPABASE_SERVICE_ROLE_KEY en .env.local.");
+  const supabase = createClient(required("NEXT_PUBLIC_SUPABASE_URL"), supabaseSecretKey, { auth: { autoRefreshToken: false, persistSession: false } });
   const drive = await createDriveClient();
   const outputDirectory = resolve(process.cwd(), "scripts/output");
   const mapReportPath = resolve(process.cwd(), process.env.HLS_MIGRATION_MAP_PATH?.trim() || "scripts/output/hls-drive-map.jsonl");
