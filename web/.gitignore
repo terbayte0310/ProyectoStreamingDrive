@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Local media preparation paths and private audit details.
 /docs/MEDIA_HLS_LOCAL.md
+
+# Local HLS migration reports and Drive file-id maps.
+/scripts/output/
