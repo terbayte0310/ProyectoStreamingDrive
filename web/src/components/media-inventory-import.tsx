@@ -101,6 +101,27 @@ export function MediaInventoryImport({ sources }: { sources: PlaybackSource[] })
     }
   }
 
+  async function synchronizeDriveOnly(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const sourceId = String(new FormData(event.currentTarget).get("sourceId") ?? "");
+    if (!sourceId) return;
+    setBusy(true);
+    setMessage("");
+    setNeedsDrive(false);
+    try {
+      const synced = await synchronize(sourceId);
+      const notes = [synced.errors ? `${synced.errors} con error` : "", synced.duplicates ? `${synced.duplicates} códigos duplicados` : ""].filter(Boolean);
+      setMessage(`Drive sincronizado: ${synced.packages} paquetes y ${synced.assets} archivos registrados.${notes.length ? ` Revisión: ${notes.join(", ")}.` : ""}`);
+      router.refresh();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "No se pudo sincronizar Drive.";
+      setMessage(detail);
+      setNeedsDrive(/drive/i.test(detail) && /(autorizar|autorización|venció|revocada)/i.test(detail));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function reconnectDrive() {
     setBusy(true);
     setMessage("");
@@ -120,6 +141,11 @@ export function MediaInventoryImport({ sources }: { sources: PlaybackSource[] })
       <select className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue="" disabled={busy} name="sourceId" required><option disabled value="">Fuente de Drive</option>{sources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select>
       <input accept=".csv,text/csv" className="admin-input rounded-lg border px-3 py-2 text-sm" disabled={busy} name="inventory" required type="file" />
       <button className="primary-button text-sm disabled:opacity-50" disabled={busy || !sources.some((source) => source.is_active)} type="submit">{busy ? "Importando y sincronizando…" : "Importar y sincronizar"}</button>
+    </form>
+    <form className="mt-3 flex flex-wrap gap-3 border-t border-slate-200 pt-4" onSubmit={(event) => void synchronizeDriveOnly(event)}>
+      <select className="admin-input min-w-64 rounded-lg border px-3 py-2 text-sm" defaultValue="" disabled={busy} name="sourceId" required><option disabled value="">Fuente de Drive</option>{sources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select>
+      <button className="secondary-button text-sm disabled:opacity-50" disabled={busy || !sources.some((source) => source.is_active)} type="submit">{busy ? "Sincronizando…" : "Sincronizar toda Drive"}</button>
+      <p className="basis-full text-xs text-slate-500">Úsalo cuando el inventario ya está importado. Detecta todas las carpetas HLS por código y no necesita CSV ni IDs.</p>
     </form>
     {message ? <p className={message.startsWith("Listo:") || message.startsWith("Catálogo") || message.startsWith("Vinculando") ? "mt-4 text-sm text-emerald-700" : "mt-4 text-sm text-rose-600"}>{message}</p> : null}
     {needsDrive ? <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><span>La autorización de Drive venció o fue revocada.</span><button className="secondary-button text-sm" disabled={busy} onClick={() => void reconnectDrive()} type="button">Reconectar Google Drive</button></div> : null}
