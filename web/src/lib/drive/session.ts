@@ -55,7 +55,7 @@ export function setDriveSessionCookies(response: NextResponse, token: GoogleToke
   response.cookies.set(DRIVE_ACCESS_COOKIE, token.access_token!, {
     httpOnly: true,
     maxAge: Math.max(60, (token.expires_in ?? 3600) - 300),
-    path: "/api/drive-token",
+    path: "/api",
     sameSite: "lax",
     secure,
   });
@@ -63,7 +63,7 @@ export function setDriveSessionCookies(response: NextResponse, token: GoogleToke
     response.cookies.set(DRIVE_REFRESH_COOKIE, token.refresh_token, {
       httpOnly: true,
       maxAge: 180 * 24 * 60 * 60,
-      path: "/api/drive-token",
+      path: "/api",
       sameSite: "lax",
       secure,
     });
@@ -71,14 +71,14 @@ export function setDriveSessionCookies(response: NextResponse, token: GoogleToke
   response.cookies.set(DRIVE_USER_COOKIE, userId, {
     httpOnly: true,
     maxAge: 180 * 24 * 60 * 60,
-    path: "/api/drive-token",
+    path: "/api",
     sameSite: "lax",
     secure,
   });
 }
 
 export function clearDriveSessionCookies(response: NextResponse) {
-  response.cookies.set(DRIVE_ACCESS_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/api/drive-token" });
-  response.cookies.set(DRIVE_REFRESH_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/api/drive-token" });
-  response.cookies.set(DRIVE_USER_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/api/drive-token" });
+  response.cookies.set(DRIVE_ACCESS_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/api" });
+  response.cookies.set(DRIVE_REFRESH_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/api" });
+  response.cookies.set(DRIVE_USER_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/api" });
 }
