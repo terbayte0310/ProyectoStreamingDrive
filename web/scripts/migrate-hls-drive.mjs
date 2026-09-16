@@ -33,6 +33,7 @@ const options = {
   prefix: argument("--prefix"),
   concurrency: Math.min(8, positiveInteger(argument("--concurrency"), DEFAULT_CONCURRENCY)),
   dryRun: hasArgument("--dry-run"),
+  excludePrefix: argument("--exclude-prefix"),
   limit: positiveInteger(argument("--limit"), Number.MAX_SAFE_INTEGER),
   rescan: hasArgument("--rescan"),
 };
@@ -266,7 +267,8 @@ async function main() {
 
   console.log(`${timestamp()}  Descubriendo paquetes HLS en Drive…`);
   const allDiscovered = await discoverPackages(drive, rootFolderId);
-  const discovered = options.code ? allDiscovered.filter((item) => item.internalCode === options.code) : options.prefix ? allDiscovered.filter((item) => item.internalCode.startsWith(options.prefix)) : allDiscovered;
+  const selectedDiscovered = options.code ? allDiscovered.filter((item) => item.internalCode === options.code) : options.prefix ? allDiscovered.filter((item) => item.internalCode.startsWith(options.prefix)) : allDiscovered;
+  const discovered = options.excludePrefix ? selectedDiscovered.filter((item) => !item.internalCode.startsWith(options.excludePrefix)) : selectedDiscovered;
   if ((options.code || options.prefix) && !discovered.length) throw new Error(`No se encontró el código solicitado dentro de la fuente de Drive.`);
 
   const unmatched = discovered.filter((item) => !contentByCode.has(item.internalCode));
