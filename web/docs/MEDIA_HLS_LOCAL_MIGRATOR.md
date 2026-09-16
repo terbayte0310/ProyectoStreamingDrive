@@ -4,7 +4,7 @@ Este migrador indexa una vez los archivos HLS ya subidos a Google Drive y escrib
 
 ## Seguridad
 
-El script necesita una identidad de Google con alcance de solo lectura sobre la biblioteca y `SUPABASE_SERVICE_ROLE_KEY` para escribir en las tablas de administración. Ambas credenciales permanecen en `.env.local`, ignorado por Git. Los reportes locales se guardan en `scripts/output/`, también ignorado.
+El script necesita una identidad de Google con alcance de solo lectura sobre la biblioteca y `SUPABASE_SECRET_KEY` (o la antigua `SUPABASE_SERVICE_ROLE_KEY`) para escribir en las tablas de administración. Ambas credenciales permanecen en `.env.local`, ignorado por Git. Los reportes locales se guardan en `scripts/output/`, también ignorado.
 
 La opción recomendada es una cuenta de servicio de Google Cloud: comparte únicamente la carpeta raíz `100_BIBLIOTECA_ENTRETENIMIENTO` con el correo de la cuenta de servicio como **Lector**, descarga su clave JSON fuera del repositorio y configura `GOOGLE_APPLICATION_CREDENTIALS` con su ruta absoluta. Alternativamente, configura `GOOGLE_DRIVE_REFRESH_TOKEN` junto con el client ID y secreto existentes.
 
@@ -13,7 +13,7 @@ La opción recomendada es una cuenta de servicio de Google Cloud: comparte únic
 En `web/.env.local`, añade:
 
 ```dotenv
-SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_SECRET_KEY=...
 HLS_DRIVE_ROOT_FOLDER_ID=<id-de-la-carpeta-raiz-hls>
 GOOGLE_APPLICATION_CREDENTIALS=C:\ruta\privada\drive-reader-service-account.json
 ```
