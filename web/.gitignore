@@ -45,3 +45,5 @@ next-env.d.ts
 
 # Local HLS migration reports and Drive file-id maps.
 /scripts/output/
+biblioteca-de-cursos-507900-eb3747da92e0.json
+.vercel
