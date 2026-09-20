@@ -24,7 +24,7 @@ No se pegan IDs de Drive título por título ni se edita Supabase manualmente.
 1. Convierte localmente el archivo a un paquete HLS bajo su código interno (`MOV-xxxxx` o `SER-xxxxx-Sxx-Exx`).
 2. Comprueba el paquete localmente: debe contener `master.m3u8`, `video/`, `audio/` y los subtítulos disponibles.
 3. Sube la carpeta completa a `100_BIBLIOTECA_ENTRETENIMIENTO` en Drive, sin modificar nombres ni estructura.
-4. Añade el título o episodio al inventario CSV y usa **Importar inventario y sincronizar** desde Administración.
+4. Añade el título o episodio al inventario CSV y usa **Importar solo catálogo** desde Administración. Esto crea registros en borrador y no consulta Drive ni publica contenido.
 5. Ejecuta el migrador local para registrar el mapa `ruta relativa → ID de Drive` de los paquetes nuevos:
 
    ```powershell

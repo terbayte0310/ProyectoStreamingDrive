@@ -55,7 +55,7 @@ export function MediaInventoryImport({ onFinished, sources }: { onFinished?: () 
     let packages = 0; let assets = 0; let remaining = 0; let errors = 0; let duplicates = 0;
     const attempted = new Set<string>();
     do {
-      const response = await fetch("/api/admin/media-playback/batch", { body: JSON.stringify({ refresh: true, skipCodes: Array.from(attempted), sourceId: source }), headers: { "Content-Type": "application/json" }, method: "POST" });
+      const response = await fetch("/api/admin/media-playback/batch", { body: JSON.stringify({ refresh: false, skipCodes: Array.from(attempted), sourceId: source }), headers: { "Content-Type": "application/json" }, method: "POST" });
       const result = await response.json().catch(() => ({})) as { duplicateCodes?: string[]; error?: string; errors?: Array<{ internalCode: string }>; remaining?: number; scanned?: Array<{ assets: number; internalCode: string }> };
       if (!response.ok) throw new Error(result.error ?? "No se pudieron vincular los paquetes de Drive.");
       const current = result.scanned ?? [];
@@ -79,21 +79,27 @@ export function MediaInventoryImport({ onFinished, sources }: { onFinished?: () 
     setNeedsDrive(/drive/i.test(detail) && /(autorizar|autorización|venció|revocada)/i.test(detail));
   }
 
-  async function importAndSync() {
-    if (!chosenSource || !file) return;
+  async function importInventory() {
+    if (!file) throw new Error("Selecciona un CSV antes de importar.");
+    setPhase({ label: "Leyendo el CSV…", percent: 5 });
+    const rows = parseCsv(await file.text());
+    setPhase({ label: `Creando ${rows.length} registros del catálogo…`, percent: 35 });
+    const response = await fetch("/api/admin/media/import", { body: JSON.stringify({ rows }), headers: { "Content-Type": "application/json" }, method: "POST" });
+    const result = await response.json().catch(() => ({})) as ImportResult;
+    if (!response.ok) throw new Error(result.errors?.slice(0, 3).join(" ") || result.error || "No se pudo importar el inventario.");
+    return result.created ?? { episodes: 0, movies: 0, seasons: 0, series: 0 };
+  }
+
+  function importSummary(created: { episodes: number; movies: number; seasons: number; series: number }) {
+    return `${created.movies} películas, ${created.series} series, ${created.seasons} temporadas y ${created.episodes} episodios`;
+  }
+
+  async function importOnly() {
+    if (!file) return;
     setNeedsDrive(false);
     try {
-      setPhase({ label: "Leyendo el CSV…", percent: 5 });
-      const rows = parseCsv(await file.text());
-      setPhase({ label: `Creando ${rows.length} registros del catálogo…`, percent: 15 });
-      const response = await fetch("/api/admin/media/import", { body: JSON.stringify({ rows }), headers: { "Content-Type": "application/json" }, method: "POST" });
-      const result = await response.json().catch(() => ({})) as ImportResult;
-      if (!response.ok) throw new Error(result.errors?.slice(0, 3).join(" ") || result.error || "No se pudo importar el inventario.");
-      const created = result.created ?? { episodes: 0, movies: 0, seasons: 0, series: 0 };
-      setPhase({ label: "Catálogo creado. Buscando paquetes HLS en Drive…", percent: 35 });
-      const synced = await synchronize(chosenSource, 35);
-      const notes = [synced.errors ? `${synced.errors} con error` : "", synced.duplicates ? `${synced.duplicates} códigos duplicados` : ""].filter(Boolean);
-      toast(`Listo: ${created.movies} películas, ${created.series} series, ${created.seasons} temporadas y ${created.episodes} episodios. ${synced.packages} paquetes vinculados.${notes.length ? ` Revisión: ${notes.join(", ")}.` : ""}`, notes.length ? "warn" : "success", 10_000);
+      const created = await importInventory();
+      toast(`Catálogo importado: ${importSummary(created)}. Sigue con el migrador local para vincular Drive.`, "success", 10_000);
       setFile(null);
       await onFinished?.();
       router.refresh();
@@ -104,6 +110,24 @@ export function MediaInventoryImport({ onFinished, sources }: { onFinished?: () 
     }
   }
 
+  async function importAndSync() {
+    if (!chosenSource || !file) return;
+    setNeedsDrive(false);
+    try {
+      const created = await importInventory();
+      setPhase({ label: "Catálogo creado. Buscando paquetes HLS en Drive…", percent: 35 });
+      const synced = await synchronize(chosenSource, 35);
+      const notes = [synced.errors ? `${synced.errors} con error` : "", synced.duplicates ? `${synced.duplicates} códigos duplicados` : ""].filter(Boolean);
+      toast(`Listo: ${importSummary(created)}. ${synced.packages} paquetes pendientes vinculados.${notes.length ? ` Revisión: ${notes.join(", ")}.` : ""}`, notes.length ? "warn" : "success", 10_000);
+      setFile(null);
+      await onFinished?.();
+      router.refresh();
+    } catch (error) {
+      handleFailure(error, "No se pudo importar el inventario.");
+    } finally {
+      setPhase(null);
+    }
+  }
   async function syncOnly() {
     if (!chosenSource) return;
     setNeedsDrive(false);
@@ -153,8 +177,9 @@ export function MediaInventoryImport({ onFinished, sources }: { onFinished?: () 
           </div>
         ) : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <button className="btn btn-primary" disabled={busy || !file || !chosenSource} onClick={() => void importAndSync()} type="button"><Icon name="upload" />Importar y sincronizar</button>
-          <button className="btn btn-ghost" disabled={busy || !chosenSource} onClick={() => void syncOnly()} title="Cuando el inventario ya está importado" type="button"><Icon name="refresh" />Solo sincronizar Drive</button>
+          <button className="btn btn-primary" disabled={busy || !file} onClick={() => void importOnly()} type="button"><Icon name="upload" />Importar solo catálogo</button>
+          <button className="btn btn-ghost" disabled={busy || !file || !chosenSource} onClick={() => void importAndSync()} title="Importa y vincula únicamente paquetes que siguen pendientes" type="button"><Icon name="upload" />Importar y vincular pendientes</button>
+          <button className="btn btn-ghost" disabled={busy || !chosenSource} onClick={() => void syncOnly()} title="Cuando el inventario ya está importado" type="button"><Icon name="refresh" />Vincular paquetes pendientes</button>
         </div>
         {needsDrive ? (
           <div className="notice notice-warn" style={{ alignItems: "center", flexWrap: "wrap" }}>
