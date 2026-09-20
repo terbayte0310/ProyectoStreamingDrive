@@ -98,7 +98,7 @@ export function MediaHlsPlayer({ backHref, backdrop, badges, module, next, packa
         // Token, worker y la librería HLS se preparan en paralelo. El token
         // también renueva la cookie HttpOnly que usa la ruta de respaldo.
         const [tokenResponse, worker, HlsModule] = await Promise.all([
-          fetch(`/api/drive-token?force=1&module=${module}`, { cache: "no-store", credentials: "same-origin" }),
+          fetch(`/api/drive-token?module=${module}`, { cache: "no-store", credentials: "same-origin" }),
           getDriveWorker().catch(() => null),
           import("hls.js"),
         ]);

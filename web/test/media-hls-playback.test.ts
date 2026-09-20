@@ -107,8 +107,9 @@ test("future conversions generate subtitle playlists instead of linking WebVTT f
   assert.doesNotMatch(converter, /URI=.*subtitles\/\$\(\$subtitle\.Language\)\.vtt/);
 });
 
-test("the player refreshes Drive once before hls.js requests secondary assets", () => {
-  assert.match(player, /api\/drive-token\?force=1&module=\$\{module\}/);
+test("the player prepares the current Drive token before hls.js requests secondary assets", () => {
+  assert.match(player, /api\/drive-token\?module=\$\{module\}/);
+  assert.doesNotMatch(player, /api\/drive-token\?force=1&module=\$\{module\}/);
   assert.match(player, /manifest\?hls-route=drive-cookie-v3/);
-  assert.ok(player.indexOf("api/drive-token?force=1") < player.indexOf("instance.loadSource"));
+  assert.ok(player.indexOf("api/drive-token?module=") < player.indexOf("instance.loadSource"));
 });

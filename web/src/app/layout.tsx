@@ -4,6 +4,7 @@ import { ViewTransition } from "react";
 
 import "./globals.css";
 
+import { DriveWorkerWarmup } from "@/components/drive-worker-warmup";
 import { InteractionLayer } from "@/components/interaction-layer";
 import { SessionSignOutCoordinator } from "@/components/session-sign-out-coordinator";
 import { Toaster } from "@/components/toaster";
@@ -34,8 +35,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html className={`${display.variable} ${body.variable} ${mono.variable}`} data-scroll-behavior="smooth" lang="es" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <link crossOrigin="anonymous" href="https://www.googleapis.com" rel="preconnect" />
       </head>
       <body>
+        <DriveWorkerWarmup />
         <SessionSignOutCoordinator />
         <InteractionLayer />
         <ViewTransition default="nb-page">
