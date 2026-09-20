@@ -118,6 +118,17 @@ test("reserves before Drive and confirms an accepted range", async () => {
   assert.deepEqual(operations, ["reserve", "confirm"]);
 });
 
+test("course ranges are privately cacheable so the browser can reuse bytes during one class", async () => {
+  const worker = createWorkerHarness(200);
+  worker.message({ token: "active-token", type: "drive-access-token" });
+
+  const response = await worker.stream();
+
+  assert.equal(response?.headers.get("cache-control"), "private, max-age=900");
+  assert.equal(response?.headers.get("accept-ranges"), "bytes");
+  assert.equal(response?.headers.get("content-disposition"), null);
+});
+
 test("the emergency fuse blocks a new request before Drive", async () => {
   const worker = createWorkerHarness(200, "fresh-token", {
     allowed: false,
