@@ -1,14 +1,13 @@
 "use client";
 
+import { registerDriveWorker } from "@/lib/media/drive-worker";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-const workerUrl = "/sw.js?revision=budget-v1";
 const channelName = "nebula-session";
 const storageKey = "nebula-session-sign-out";
 
 export function prepareDriveWorker() {
-  if (!("serviceWorker" in navigator)) return;
-  void navigator.serviceWorker.register(workerUrl, { scope: "/" }).catch(() => undefined);
+  void registerDriveWorker()?.catch(() => undefined);
 }
 
 export async function clearDriveWorkerToken() {

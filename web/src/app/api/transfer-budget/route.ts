@@ -38,18 +38,14 @@ function isSameOrigin(request: NextRequest) {
   return !origin || origin === getRequestOrigin(request);
 }
 
+// Se ejecuta antes de cada lectura de vídeo: identidad local por JWT y nada más.
+// reserve_transfer_usage exige cuenta autorizada, y las políticas RLS de
+// drive_items (Cursos) y media_hls_assets (Películas/Series) limitan qué
+// archivos puede medir cada usuario según sus módulos.
 async function getAuthorizedClient() {
   const supabase = await createSupabaseServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return null;
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_authorized")
-    .eq("id", userData.user.id)
-    .maybeSingle<{ is_authorized: boolean }>();
-  if (!profile?.is_authorized) return null;
-  const { data: hasCourses, error } = await supabase.rpc("has_module_access", { p_module: "courses" });
-  return !error && hasCourses ? supabase : null;
+  const { data, error } = await supabase.auth.getClaims();
+  return error || !data?.claims.sub ? null : supabase;
 }
 
 export async function POST(request: NextRequest) {

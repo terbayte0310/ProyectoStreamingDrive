@@ -1,11 +1,13 @@
 import type { CSSProperties } from "react";
 
+// Paletas de "luz de sala": cada curso sin portada recibe una composición estable.
 const palettes = [
-  ["#34452a", "#6c823e", "#d9ed8d"],
-  ["#413c4a", "#83708c", "#d6c1d8"],
-  ["#214644", "#408f85", "#b2e3ce"],
-  ["#493f32", "#9d8058", "#eed3a0"],
-  ["#283d38", "#658f75", "#c9e7bc"],
+  ["#3a1d2e", "#ff6a3d", "#ffc59e"],
+  ["#1e1c3f", "#7b61ff", "#c9bdff"],
+  ["#12302c", "#20b38a", "#aef0d5"],
+  ["#3b2413", "#f6a23b", "#ffe1a8"],
+  ["#2d1330", "#ff3d7f", "#ffb3cc"],
+  ["#10263a", "#3aa0ff", "#b5deff"],
 ] as const;
 
 function hash(value: string) {
@@ -14,51 +16,34 @@ function hash(value: string) {
   return Math.abs(result);
 }
 
-function initials(title: string) {
-  return title
-    .split(/\s+/)
-    .filter((word) => word.length > 2)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase() || "NX";
+export function initialsOf(title: string) {
+  return title.split(/\s+/).filter((word) => word.length > 2).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "NB";
 }
 
-export function CourseCover({
-  category,
-  coverUrl,
-  priority = false,
-  title,
-}: {
-  category: string;
-  coverUrl?: string | null;
-  priority?: boolean;
-  title: string;
-}) {
+export function CourseCover({ category, className = "", coverUrl, priority = false, showLabel = true, title }: { category: string; className?: string; coverUrl?: string | null; priority?: boolean; showLabel?: boolean; title: string }) {
   const seed = hash(`${category}:${title}`);
   const palette = palettes[seed % palettes.length];
   const style = {
-    "--cover-a": palette[0],
-    "--cover-b": palette[1],
-    "--cover-c": palette[2],
+    "--c1": palette[0],
+    "--c2": palette[1],
+    "--c3": palette[2],
+    "--cx": `${55 + (seed % 40)}%`,
+    "--cy": `${5 + ((seed >> 3) % 30)}%`,
   } as CSSProperties;
 
   return (
-    <div className="course-cover" style={style}>
+    <div className={`course-cover ${className}`} style={style}>
       {coverUrl ? (
-        // URLs de portada son datos administrados; lazy-loading evita trabajo fuera de pantalla.
+        // Las portadas son URLs administradas; carga diferida fuera de pantalla.
         // eslint-disable-next-line @next/next/no-img-element
         <img alt="" decoding="async" fetchPriority={priority ? "high" : "auto"} loading={priority ? "eager" : "lazy"} src={coverUrl} />
       ) : (
         <>
-          <span aria-hidden="true" className="cover-orbit cover-orbit-one" />
-          <span aria-hidden="true" className="cover-orbit cover-orbit-two" />
-          <span aria-hidden="true" className="cover-grid" />
-          <span aria-hidden="true" className="cover-monogram">{initials(title)}</span>
+          <span aria-hidden="true" className="cover-rings" />
+          <span aria-hidden="true" className="cover-glyph">{initialsOf(title)}</span>
         </>
       )}
-      <span className="cover-scrim" />
-      <span className="cover-category">{category}</span>
+      {showLabel && category ? <span className="cover-label"><span className="badge">{category}</span></span> : null}
     </div>
   );
 }

@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getCurrentAccess } from "@/lib/auth/access";
+import { getSessionUserId } from "@/lib/auth/access";
 import { clearDriveSessionCookies, DRIVE_ACCESS_COOKIE, DRIVE_REFRESH_COOKIE, DRIVE_USER_COOKIE, refreshDriveAccessToken, setDriveSessionCookies } from "@/lib/drive/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const access = await getCurrentAccess();
-  if (!access) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
-  if (!access.profile?.is_authorized) return NextResponse.json({ error: "Esta cuenta no está autorizada." }, { status: 403 });
+  // JWT validado localmente + has_module_access (que ya exige cuenta autorizada):
+  // una sola consulta antes de entregar el token al reproductor.
+  const userId = await getSessionUserId();
+  if (!userId) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
+  const access = { user: { id: userId } };
 
   const requestedModule = request.nextUrl.searchParams.get("module") ?? "courses";
   if (requestedModule !== "courses" && requestedModule !== "movies" && requestedModule !== "series") {

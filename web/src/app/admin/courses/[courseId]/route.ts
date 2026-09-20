@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getCurrentAccess } from "@/lib/auth/access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const textFields = ["custom_title", "author", "platform", "description", "cover_url", "published_on"] as const;
@@ -20,11 +21,11 @@ export async function PATCH(request: Request, context: RouteContext<"/admin/cour
     update.is_visible = body.is_visible;
   }
 
+  // Identidad por JWT local (sin viaje a Auth) y rol desde el perfil.
+  const access = await getCurrentAccess();
+  if (!access) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
+  if (!access.profile?.is_authorized || access.profile.role !== "admin") return NextResponse.json({ error: "No tienes permiso de administrador." }, { status: 403 });
   const supabase = await createSupabaseServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
-  const { data: profile } = await supabase.from("profiles").select("role, is_authorized").eq("id", userData.user.id).maybeSingle<{ role: string; is_authorized: boolean }>();
-  if (!profile?.is_authorized || profile.role !== "admin") return NextResponse.json({ error: "No tienes permiso de administrador." }, { status: 403 });
 
   const { data, error } = await supabase.from("courses").update(update).eq("id", courseId).select("id, detected_title, custom_title, author, platform, published_on, description, cover_url, is_visible").maybeSingle();
   if (error) return NextResponse.json({ error: "No se pudieron guardar los cambios." }, { status: 500 });

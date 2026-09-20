@@ -1,124 +1,27 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import Link from "next/link";
+import type { Metadata } from "next";
 
 import { Brand } from "@/components/brand";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { buildGoogleSignInOptions } from "@/lib/auth/google-oauth";
-import { completeSignOut } from "@/lib/auth/sign-out-client";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { FrameWall } from "@/components/frame-wall";
+import { SignInPanel } from "@/components/sign-in-panel";
 
+export const metadata: Metadata = { title: "Acceso" };
+
+// El escenario es de servidor (sin JS); solo la tarjeta de acceso hidrata.
 export default function SignInPage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    let timedOut = false;
-    const timeout = window.setTimeout(() => {
-      timedOut = true;
-      setIsLoading(false);
-      setMessage("La comprobación de sesión tardó demasiado. Revisa la conexión y recarga la página.");
-    }, 8_000);
-    void supabase.auth.getUser()
-      .then(({ data, error }) => {
-        window.clearTimeout(timeout);
-        setUser(data.user);
-        if (error && error.name !== "AuthSessionMissingError") setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
-      })
-      .catch(() => {
-        window.clearTimeout(timeout);
-        setMessage("No se pudo comprobar la sesión. Revisa tu conexión e inténtalo de nuevo.");
-      })
-      .finally(() => {
-        if (!timedOut) setIsLoading(false);
-      });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      window.clearTimeout(timeout);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-    return () => {
-      window.clearTimeout(timeout);
-      subscription.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const error = searchParams.get("error");
-    const notice = searchParams.get("notice");
-    if (error === "drive_authorization") {
-      const timer = window.setTimeout(
-        () => setMessage("Google no entregó una autorización renovable para Drive. Cierra esta sesión y vuelve a entrar para conceder el acceso en el mismo inicio de sesión."),
-        0,
-      );
-      return () => window.clearTimeout(timer);
-    }
-    if (notice === "cleanup-pending") {
-      const timer = window.setTimeout(
-        () => setMessage("La sesión se cerró en este dispositivo. Vuelve a iniciar sesión si necesitas usar Drive."),
-        0,
-      );
-      return () => window.clearTimeout(timer);
-    }
-  }, []);
-
-  async function signInWithGoogle() {
-    setMessage(null);
-    const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
-      provider: "google",
-      options: buildGoogleSignInOptions(window.location.origin),
-    });
-    if (error) setMessage("Google no pudo iniciar la sesión. Inténtalo nuevamente.");
-  }
-
-  async function signOut() {
-    await completeSignOut();
-  }
-
   return (
-    <main className="login-page">
-      <section className="login-visual">
-        <Brand />
-        <div aria-hidden="true" className="login-cinema-art"><div className="login-film-frame">N<span>01 / TU PRÓXIMA HISTORIA</span></div><div className="login-orbit" /></div>
-        <div className="login-copy">
-          <p className="eyebrow">Tu biblioteca privada</p>
-          <h2 className="display-title">Dale play a tu mundo.</h2>
-          <p>Películas para desconectar. Series para quedarte. Cursos para ir más lejos. Todo en tu biblioteca privada.</p>
+    <main className="auth">
+      <section className="auth-stage">
+        <FrameWall />
+        <Brand href="/signin" />
+        <div className="auth-copy">
+          <p className="kicker">Tu biblioteca privada</p>
+          <h1 className="display">Dale play<br />a tu <span className="text-gradient">mundo.</span></h1>
+          <p>Películas para desconectar. Series para quedarte. Cursos para ir más lejos. Todo en un solo lugar, solo para tu círculo.</p>
         </div>
-        <p className="muted">NÉBULA / Historias. Ideas. Nuevos comienzos.</p>
+        <div className="auth-foot"><span>Historias</span><span>Ideas</span><span>Nuevos comienzos</span></div>
       </section>
-
-      <section className="login-panel">
-        <div className="login-card">
-          <div className="flex items-center justify-between">
-            <p className="eyebrow">Acceso privado</p>
-            <ThemeToggle />
-          </div>
-          <h1>Bienvenido de vuelta</h1>
-          <p>Ingresa con una cuenta autorizada para abrir tu biblioteca.</p>
-
-          {isLoading ? <p className="muted">Comprobando sesión…</p> : user ? (
-            <div className="auth-session">
-              <div><strong>Sesión activa</strong><p className="muted">{user.email}</p></div>
-              <Link className="primary-button" href="/">Abrir mi biblioteca <span aria-hidden="true">→</span></Link>
-              <button className="secondary-button" onClick={() => void signOut()} type="button">Cerrar sesión</button>
-            </div>
-          ) : (
-            <>
-              <button className="primary-button google-button" onClick={() => void signInWithGoogle()} type="button">
-                <span aria-hidden="true" className="google-mark">G</span>
-                Continuar con Google
-              </button>
-            </>
-          )}
-          {message ? <p className="auth-message" role="alert">{message}</p> : null}
-          <p className="mt-6 text-xs muted">Google es el único método de acceso. Solo las cuentas aprobadas pueden entrar.</p>
-        </div>
+      <section className="auth-panel">
+        <SignInPanel />
       </section>
     </main>
   );

@@ -1,354 +1,247 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { CinemaPlayer } from "@/components/cinema-player";
-import { AppHeader } from "@/components/app-header";
+import { SegmentedThumb } from "@/components/catalog-collection";
 import { CourseResources } from "@/components/course-resources";
+import { Icon } from "@/components/icons";
 import { LessonNotes } from "@/components/lesson-notes";
+import { NebulaPlayer, type PlayerStatus } from "@/components/nebula-player";
+import { toast } from "@/components/toaster";
 import { completeSignOut } from "@/lib/auth/sign-out-client";
-import { buildCoursePlaybackQueue } from "@/lib/catalog/outline";
+import { getDriveWorker, sendDriveToken } from "@/lib/media/drive-worker";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-type Lesson = {
-  course_id: string;
-  custom_title: string | null;
-  detected_title: string;
-  drive_item_id: string | null;
-  id: string;
-  position: number;
-  section_id: string | null;
+export type ClassroomLesson = { completed: boolean; fileId: string | null; id: string; position: number; section: string | null; title: string };
+
+type Props = {
+  autoplay: boolean;
+  courseId: string;
+  courseTitle: string;
+  initialLessonId: string;
+  lessons: ClassroomLesson[];
+  loadError: string;
+  userId: string;
 };
 
-type Section = {
-  course_id: string;
-  id: string;
-  parent_section_id: string | null;
-  position: number;
-};
+const theaterKey = "nb-theater";
+const theaterListeners = new Set<() => void>();
+const readTheater = () => { try { return localStorage.getItem(theaterKey) === "1"; } catch { return false; } };
+const subscribeTheater = (listener: () => void) => { theaterListeners.add(listener); return () => { theaterListeners.delete(listener); }; };
 
-type PlayerState = "error" | "loading" | "needs-drive" | "ready";
-const workerRevision = "media-hls-v1";
-
-async function getDriveWorker() {
-  const registration = await navigator.serviceWorker.register(
-    `/sw.js?revision=${workerRevision}`,
-    { scope: "/" },
-  );
-  if (registration.active?.scriptURL.includes(`revision=${workerRevision}`)) {
-    return registration.active;
-  }
-
-  const pending = registration.installing ?? registration.waiting;
-  if (!pending) {
-    throw new Error("No se pudo actualizar el reproductor de Drive. Recarga normalmente.");
-  }
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(
-      () => reject(new Error("La actualización de Drive tardó demasiado.")),
-      5000,
-    );
-    pending.addEventListener("statechange", () => {
-      if (pending.state === "activated") {
-        window.clearTimeout(timeout);
-        resolve();
-      }
-      if (pending.state === "redundant") {
-        window.clearTimeout(timeout);
-        reject(new Error("No se pudo activar el reproductor de Drive."));
-      }
-    });
-  });
-  if (!registration.active?.scriptURL.includes(`revision=${workerRevision}`)) {
-    throw new Error("El reproductor de Drive no se actualizó. Recarga normalmente.");
-  }
-  return registration.active;
-}
-
-export default function CoursePlayerContent() {
-  const router = useRouter();
-  const params = useSearchParams();
+export default function CoursePlayerContent({ autoplay, courseId, courseTitle, initialLessonId, lessons: initialLessons, loadError, userId }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const lastSavedAt = useRef(0);
-  const [state, setState] = useState<PlayerState>("loading");
-  const [error, setError] = useState("");
-  const [progressError, setProgressError] = useState("");
-  const [downloadError, setDownloadError] = useState("");
+  const [lessons, setLessons] = useState(initialLessons);
+  const [activeId, setActiveId] = useState(initialLessonId);
+  const [autoPlayNext, setAutoPlayNext] = useState(autoplay);
+  const [status, setStatus] = useState<PlayerStatus>(loadError ? "error" : "loading");
+  const [error, setError] = useState(loadError);
+  // Preferencia por dispositivo: el servidor pinta el modo normal y el cliente aplica la guardada.
+  const theater = useSyncExternalStore(subscribeTheater, readTheater, () => false);
+  const [tab, setTab] = useState<"notes" | "resources">("notes");
   const [downloading, setDownloading] = useState(false);
-  const [courseComplete, setCourseComplete] = useState(false);
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [selectedId, setSelectedId] = useState<string>();
-  const [fileId, setFileId] = useState<string>();
-  const [userId, setUserId] = useState<string>();
-  const requestedLessonId = params.get("lesson");
-  const shouldAutoplay = params.get("autoplay") === "1";
+  const [attempt, setAttempt] = useState(0);
 
+  const index = lessons.findIndex((lesson) => lesson.id === activeId);
+  const active = index >= 0 ? lessons[index] : undefined;
+  const previous = index > 0 ? lessons[index - 1] : undefined;
+  const next = index >= 0 ? lessons[index + 1] : undefined;
+  const completedCount = lessons.filter((lesson) => lesson.completed).length;
+  const percent = lessons.length ? Math.round((completedCount / lessons.length) * 100) : 0;
+
+  // Worker y token de Drive en paralelo; el vídeo se monta en cuanto el worker controla la página.
   useEffect(() => {
+    if (loadError) return;
     let cancelled = false;
-
     async function prepare() {
-      const startedAt = performance.now();
-      setState("loading");
-      setError("");
-      setCourseComplete(false);
-      lastSavedAt.current = 0;
+      setStatus("loading");
       try {
-        if (!requestedLessonId) {
-          router.replace("/catalog");
-          return;
-        }
-
-        const db = createSupabaseBrowserClient();
-        // These requests do not depend on one another. Starting them together
-        // removes two browser-to-Supabase round trips from player startup.
-        const [userResult, accessResult, requestedResult] = await Promise.all([
-          db.auth.getUser(),
-          db.rpc("has_module_access", { p_module: "courses" }),
-          db
-            .from("lessons")
-            .select("course_id")
-            .eq("id", requestedLessonId)
-            .eq("is_visible", true)
-            .maybeSingle<{ course_id: string }>(),
-        ]);
-        const { data: userData, error: userError } = userResult;
-        if (userError) throw new Error("No se pudo comprobar tu sesión.");
-        if (!userData.user) {
-          router.replace("/signin");
-          return;
-        }
-        const { data: hasCourses, error: accessError } = accessResult;
-        if (accessError) throw new Error("No se pudo comprobar el acceso al curso.");
-        if (!hasCourses) {
-          router.replace("/catalog?access=course-denied");
-          return;
-        }
-        const { data: requestedLesson, error: requestedError } = requestedResult;
-        if (requestedError) throw new Error("No se pudo consultar la lección solicitada.");
-        if (!requestedLesson) throw new Error("La lección solicitada no existe o no está visible.");
-        const identityDuration = performance.now() - startedAt;
-
-        // Once access is confirmed, the outline, Drive token and service worker
-        // can all load in parallel.
-        const bootstrapStartedAt = performance.now();
-        const [lessonResult, sectionResult, worker, tokenResponse] = await Promise.all([
-          db
-            .from("lessons")
-            .select("id, course_id, detected_title, custom_title, section_id, drive_item_id, position")
-            .eq("course_id", requestedLesson.course_id)
-            .eq("is_visible", true)
-            .order("position"),
-          db
-            .from("course_sections")
-            .select("id, course_id, parent_section_id, position")
-            .eq("course_id", requestedLesson.course_id)
-            .eq("is_detected_section", true)
-            .eq("is_visible", true)
-            .order("position"),
-          getDriveWorker(),
-          fetch("/api/drive-token", { cache: "no-store" }),
-        ]);
-        if (lessonResult.error || sectionResult.error) {
-          throw new Error("No se pudo cargar la estructura del curso.");
-        }
-
-        const ordered = buildCoursePlaybackQueue(
-          requestedLesson.course_id,
-          (lessonResult.data ?? []) as Lesson[],
-          (sectionResult.data ?? []) as Section[],
-        );
-        const active = ordered.find((lesson) => lesson.id === requestedLessonId);
-        if (!active?.drive_item_id) throw new Error("No hay un archivo reproducible para esta lección.");
-
-        // Keep this direct lookup: the embedded PostgREST relation can be
-        // hidden by RLS even when the lesson itself is readable.
-        const { data: item, error: itemError } = await db
-          .from("drive_items")
-          .select("drive_file_id")
-          .eq("id", active.drive_item_id)
-          .maybeSingle<{ drive_file_id: string }>();
-        if (itemError || !item) throw new Error("No se encontró el archivo de Drive de esta lección.");
-        if (tokenResponse.status === 401) {
-          if (!cancelled) setState("needs-drive");
-          return;
-        }
+        const [worker, tokenResponse] = await Promise.all([getDriveWorker(), fetch("/api/drive-token", { cache: "no-store" })]);
+        if (cancelled) return;
+        if (tokenResponse.status === 401) { setStatus("needs-auth"); return; }
         if (!tokenResponse.ok) throw new Error("No se pudo autorizar la reproducción.");
         const { accessToken } = (await tokenResponse.json()) as { accessToken: string };
-        worker.postMessage({ token: accessToken, type: "drive-access-token" });
-
-        if (!cancelled) {
-          console.info(
-            `[player-performance] identity_ms=${identityDuration.toFixed(1)} bootstrap_ms=${(performance.now() - bootstrapStartedAt).toFixed(1)} ready_ms=${(performance.now() - startedAt).toFixed(1)}`,
-          );
-          setFileId(item.drive_file_id);
-          setLessons(ordered);
-          setSelectedId(active.id);
-          setState("ready");
-          setUserId(userData.user.id);
-        }
+        await sendDriveToken(worker, accessToken, "courses");
+        if (!cancelled) setStatus("ready");
       } catch (caught) {
-        if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "No se pudo preparar el reproductor.");
-          setState("error");
-        }
+        if (!cancelled) { setError(caught instanceof Error ? caught.message : "No se pudo preparar el reproductor."); setStatus("error"); }
       }
     }
-
     void prepare();
-    return () => {
-      cancelled = true;
-    };
-  }, [requestedLessonId, router]);
+    return () => { cancelled = true; };
+  }, [attempt, loadError]);
 
-  const selected = lessons.find((lesson) => lesson.id === selectedId);
-  const selectedIndex = lessons.findIndex((lesson) => lesson.id === selectedId);
-  const previous = selectedIndex > 0 ? lessons[selectedIndex - 1] : undefined;
-  const next = selectedIndex >= 0 ? lessons[selectedIndex + 1] : undefined;
-  const title = selected ? selected.custom_title ?? selected.detected_title : "";
-  async function saveProgress(seconds: number, duration: number, completed = false) {
-    if (!selectedId || !userId || !Number.isFinite(duration)) return;
+  // Atrás/adelante del navegador vuelven a la lección correspondiente.
+  useEffect(() => {
+    const onPop = () => {
+      const lesson = new URLSearchParams(window.location.search).get("lesson");
+      if (lesson && lessons.some((item) => item.id === lesson)) setActiveId(lesson);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [lessons]);
+
+  // La lección activa se mantiene visible en la lista.
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeId]);
+
+  const saveProgress = useCallback(async (lessonId: string, seconds: number, duration: number, completed = false) => {
+    if (!Number.isFinite(duration) || duration <= 0) return;
     const { error: saveError } = await createSupabaseBrowserClient().from("lesson_progress").upsert({
       completed_at: completed ? new Date().toISOString() : null,
       duration_seconds: Math.round(duration),
-      lesson_id: selectedId,
+      lesson_id: lessonId,
       position_seconds: Math.round(completed ? duration : seconds),
       state: completed ? "completed" : "in_progress",
       user_id: userId,
     });
-    setProgressError(saveError ? "No se pudo guardar tu avance. Comprueba tu conexión antes de cambiar de lección." : "");
+    if (saveError) toast("No se pudo guardar tu avance. Revisa la conexión.", "warn");
+    setLessons((current) => current.map((lesson) => lesson.id === lessonId ? { ...lesson, completed: lesson.completed || completed, position: completed ? 0 : Math.round(seconds) } : lesson));
+  }, [userId]);
+
+  const saveCurrent = useCallback(async () => {
+    const video = videoRef.current;
+    if (video && active && !video.ended && Number.isFinite(video.duration) && video.currentTime > 3) await saveProgress(active.id, video.currentTime, video.duration);
+  }, [active, saveProgress]);
+
+  const select = useCallback((lessonId: string, play = true) => {
+    if (lessonId === activeId) return;
+    void saveCurrent();
+    setAutoPlayNext(play);
+    setActiveId(lessonId);
+    window.history.pushState(null, "", `/course-player?lesson=${lessonId}`);
+  }, [activeId, saveCurrent]);
+
+  async function onEnded() {
+    const video = videoRef.current;
+    if (!video || !active) return;
+    await saveProgress(active.id, video.duration, video.duration, true);
+    if (!next) toast(`¡Terminaste “${courseTitle}”! Tu progreso quedó guardado.`, "success", 7000);
   }
 
-  async function restoreProgress() {
-    const video = videoRef.current;
-    if (!video || !selectedId || !userId) return;
-    const { data } = await createSupabaseBrowserClient()
-      .from("lesson_progress")
-      .select("position_seconds, state")
-      .eq("lesson_id", selectedId)
-      .eq("user_id", userId)
-      .maybeSingle<{ position_seconds: number; state: string }>();
-    if (
-      data &&
-      data.state !== "completed" &&
-      data.position_seconds > 5 &&
-      data.position_seconds < video.duration - 5
-    ) {
-      video.currentTime = data.position_seconds;
-    }
-  }
-
-  async function saveCurrentPosition() {
-    const video = videoRef.current;
-    if (video && !video.ended && Number.isFinite(video.duration)) {
-      await saveProgress(video.currentTime, video.duration);
-    }
+  function toggleTheater(value: boolean) {
+    try { localStorage.setItem(theaterKey, value ? "1" : "0"); } catch { /* Preferencia opcional. */ }
+    theaterListeners.forEach((listener) => listener());
   }
 
   async function download() {
-    if (!fileId) return;
+    if (!active?.fileId) return;
     setDownloading(true);
-    setDownloadError("");
     try {
-      const response = await fetch(`/drive-download/${fileId}`, { cache: "no-store" });
+      const response = await fetch(`/drive-download/${active.fileId}`, { cache: "no-store" });
       const data = (await response.json()) as { webContentLink?: string };
-      if (!response.ok || !data.webContentLink) {
-        throw new Error("Drive no entregó un enlace de descarga para esta lección.");
-      }
+      if (!response.ok || !data.webContentLink) throw new Error("Drive no entregó un enlace de descarga para esta lección.");
       window.location.assign(data.webContentLink);
     } catch (caught) {
-      setDownloadError(caught instanceof Error ? caught.message : "No se pudo preparar la descarga.");
+      toast(caught instanceof Error ? caught.message : "No se pudo preparar la descarga.", "error");
+    } finally {
       setDownloading(false);
     }
   }
 
-  async function selectLesson(lessonId: string) {
-    await saveCurrentPosition();
-    router.push(`/course-player?lesson=${lessonId}`);
-  }
+  const groups = useMemo(() => {
+    const result: Array<{ lessons: Array<ClassroomLesson & { number: number }>; section: string | null }> = [];
+    lessons.forEach((lesson, position) => {
+      const last = result[result.length - 1];
+      if (!last || last.section !== lesson.section) result.push({ lessons: [], section: lesson.section });
+      result[result.length - 1].lessons.push({ ...lesson, number: position + 1 });
+    });
+    return result;
+  }, [lessons]);
 
-  async function playNext() {
-    const video = videoRef.current;
-    if (!video || !selectedId) return;
-    await saveProgress(video.duration, video.duration, true);
-    const following = lessons[lessons.findIndex((lesson) => lesson.id === selectedId) + 1];
-    if (following) {
-      router.push(`/course-player?lesson=${following.id}&autoplay=1`);
-    } else {
-      setCourseComplete(true);
-    }
-  }
+  const playerStatus: PlayerStatus = status === "ready" && !active?.fileId ? "error" : status;
+  const playerError = status === "ready" && !active?.fileId ? "Esta lección no tiene un archivo reproducible." : error;
 
   return (
-    <div className="app-shell player-page">
-      <AppHeader />
-      <main className="player-layout">
-        <section className="player-stage">
-          <div className="player-titlebar">
-            <div><p className="eyebrow">Lección {selectedIndex >= 0 ? selectedIndex + 1 : "—"} de {lessons.length || "—"}</p><h1>{title || "Preparando lección…"}</h1></div>
-            <Link className="secondary-button" href="/catalog">Salir del aula</Link>
+    <div className="classroom" data-theater={theater ? "" : undefined}>
+      <div className="classroom-stage">
+        <div className="classroom-head">
+          <div>
+            <Link className="back-link" href="/catalog/cursos"><Icon name="arrowLeft" />{courseTitle}</Link>
+            <h1 className="title-m">{active?.title ?? "Lección"}</h1>
           </div>
+          <div className="classroom-nav">
+            <button className="btn btn-ghost btn-sm" disabled={!previous} onClick={() => previous && select(previous.id)} type="button"><Icon name="chevronLeft" />Anterior</button>
+            <button className="btn btn-primary btn-sm" disabled={!next} onClick={() => next && select(next.id)} type="button">Siguiente<Icon name="chevronRight" /></button>
+            <button aria-label="Descargar lección" className="btn btn-ghost btn-sm btn-icon" disabled={downloading || !active?.fileId} onClick={() => void download()} title="Descargar lección" type="button"><Icon name="download" /></button>
+          </div>
+        </div>
 
-          {state === "loading" ? <div className="status-card">Preparando una reproducción segura desde Drive…</div> : null}
-          {state === "needs-drive" ? (
-            <div className="status-card">
-              <p>Esta sesión se creó antes de habilitar el acceso integrado a Drive.</p>
-              <button className="secondary-button mt-4" onClick={() => void completeSignOut()} type="button">
-                Volver a iniciar sesión
-              </button>
-            </div>
-          ) : null}
-          {state === "error" ? <div className="status-card text-rose-500">{error}</div> : null}
+        <NebulaPlayer
+          autoPlay={autoPlayNext}
+          error={playerError}
+          key={`${activeId}:${attempt}`}
+          nextLabel={next ? `Siguiente: ${next.title}` : undefined}
+          onEnded={() => void onEnded()}
+          onNext={next ? () => select(next.id) : undefined}
+          onPause={() => void saveCurrent()}
+          onPrevious={previous ? () => select(previous.id) : undefined}
+          onReauthorize={() => void completeSignOut()}
+          onRetry={() => setAttempt((value) => value + 1)}
+          onTheaterChange={toggleTheater}
+          onTimeUpdate={(event) => {
+            const video = videoRef.current;
+            if (video && active && event.timeStamp - lastSavedAt.current >= 10_000) {
+              lastSavedAt.current = event.timeStamp;
+              void saveProgress(active.id, video.currentTime, video.duration);
+            }
+          }}
+          playsInline
+          preload="metadata"
+          previousLabel={previous ? `Anterior: ${previous.title}` : undefined}
+          resumeAt={active?.position && active.position > 5 ? active.position : undefined}
+          src={playerStatus === "ready" && active?.fileId ? `/drive-stream/${active.fileId}` : undefined}
+          stage={{ index: 0, labels: ["Abriendo el canal seguro de Drive"] }}
+          status={playerStatus}
+          subtitle={`Lección ${index + 1} de ${lessons.length}`}
+          theater={theater}
+          title={active?.title ?? "Lección"}
+          upNext={next ? { onPlay: () => select(next.id), title: next.title } : null}
+          videoRef={videoRef}
+        />
 
-          {state === "ready" && fileId ? (
-            <>
-              <div className="video-shell">
-                <CinemaPlayer
-                  title={title}
-                  autoPlay={shouldAutoplay}
-                  onEnded={() => void playNext()}
-                  onLoadedMetadata={() => void restoreProgress()}
-                  onPause={() => void saveCurrentPosition()}
-                  onTimeUpdate={(event) => {
-                    const video = videoRef.current;
-                    if (video && event.timeStamp - lastSavedAt.current >= 10_000) {
-                      lastSavedAt.current = event.timeStamp;
-                      void saveProgress(video.currentTime, video.duration);
-                    }
-                  }}
-                  playsInline
-                  preload="metadata"
-                  videoRef={videoRef}
-                  src={`/drive-stream/${fileId}`}
-                />
-              </div>
-              <div className="player-tools">
-                <button className="secondary-button" disabled={!previous} onClick={() => previous && void selectLesson(previous.id)} type="button">← Anterior</button>
-                <button className="primary-button" disabled={!next} onClick={() => next && void selectLesson(next.id)} type="button">Siguiente →</button>
-                <button className="secondary-button" disabled={downloading} onClick={() => void download()} type="button">{downloading ? "Preparando…" : "↓ Descargar"}</button>
-              </div>
-              {progressError ? <p className="auth-message" role="status">{progressError}</p> : null}
-              {downloadError ? <p className="auth-message">{downloadError}</p> : null}
-              {courseComplete ? <div className="status-card"><strong>Curso completado</strong><p className="muted mt-1">Buen trabajo. Tu progreso quedó guardado.</p></div> : null}
-              {selected ? <CourseResources courseId={selected.course_id} /> : null}
-              {selectedId ? <LessonNotes key={selectedId} lessonId={selectedId} readSecond={() => videoRef.current?.currentTime ?? 0} seekTo={(seconds) => { if (videoRef.current) videoRef.current.currentTime = seconds; }} /> : null}
-            </>
-          ) : null}
+        <section className="classroom-tabs card" style={{ padding: "1.2rem" }}>
+          <div aria-label="Herramientas de la lección" className="segmented" role="tablist" style={{ width: "fit-content" }}>
+            <SegmentedThumb index={tab === "notes" ? 0 : 1} />
+            <button aria-selected={tab === "notes"} onClick={() => setTab("notes")} role="tab" type="button">Notas</button>
+            <button aria-selected={tab === "resources"} onClick={() => setTab("resources")} role="tab" type="button">Recursos</button>
+          </div>
+          <div className="tab-panel" key={tab} role="tabpanel">
+            {tab === "notes" && active ? (
+              <LessonNotes key={active.id} lessonId={active.id} readSecond={() => videoRef.current?.currentTime ?? 0} seekTo={(seconds) => { if (videoRef.current) videoRef.current.currentTime = seconds; }} />
+            ) : null}
+            {tab === "resources" ? <CourseResources courseId={courseId} /> : null}
+          </div>
         </section>
+      </div>
 
-        <aside className="player-sidebar">
-          <div className="sidebar-head"><h2>Contenido del curso</h2><p>{lessons.length} lecciones en orden</p></div>
-          <div className="lesson-list">
-            {lessons.map((lesson, index) => (
-              <button className={`lesson-button ${lesson.id === selectedId ? "lesson-button-active" : ""}`} key={lesson.id} onClick={() => void selectLesson(lesson.id)} type="button">
-                <span className="lesson-index">{String(index + 1).padStart(2, "0")}</span>
-                <span className="lesson-name">{lesson.custom_title ?? lesson.detected_title}</span>
-              </button>
-            ))}
-          </div>
-        </aside>
-      </main>
+      <aside aria-label="Contenido del curso" className="playlist">
+        <div className="playlist-head">
+          <p className="kicker kicker-plain">Contenido del curso</p>
+          <span className="meter"><span style={{ width: `${percent}%` }} /></span>
+          <div className="playlist-stats"><span>{completedCount}/{lessons.length} completadas</span><span>{percent}%</span></div>
+        </div>
+        <div className="playlist-list" ref={listRef}>
+          {groups.map((group, groupIndex) => (
+            <div key={`${group.section ?? "root"}-${groupIndex}`}>
+              {group.section ? <div className="playlist-section">{group.section}</div> : null}
+              {group.lessons.map((lesson) => (
+                <button aria-current={lesson.id === activeId} className="lesson-row" data-done={lesson.completed ? "" : undefined} key={lesson.id} onClick={() => select(lesson.id)} type="button">
+                  <span className="lesson-index">
+                    {lesson.id === activeId ? <span aria-hidden="true" className="lesson-bars"><i /><i /><i /></span> : lesson.completed ? <Icon name="check" strokeWidth={2.6} /> : String(lesson.number).padStart(2, "0")}
+                  </span>
+                  <span>{lesson.title}{!lesson.fileId ? <span className="subtle"> · sin vídeo</span> : null}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+          {!lessons.length ? <p className="muted" style={{ padding: "1rem" }}>Este curso todavía no tiene lecciones visibles.</p> : null}
+        </div>
+      </aside>
     </div>
   );
 }

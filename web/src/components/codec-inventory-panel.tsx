@@ -1,25 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 
-type ContainerGroup = {
-  byteSize: number;
-  durationMillis: number;
-  lessonCount: number;
-  mimeType: string;
-};
+import { Icon } from "@/components/icons";
+import { toast } from "@/components/toaster";
 
-type ProbedCandidate = {
-  audioCodec: string | null;
-  byteSize: number | null;
-  driveFileId: string;
-  mimeType: string;
-  name: string;
-  path: string;
-  probeError: string | null;
-  videoCodec: string | null;
-};
-
+type ContainerGroup = { byteSize: number; durationMillis: number; lessonCount: number; mimeType: string };
+type ProbedCandidate = { audioCodec: string | null; byteSize: number | null; driveFileId: string; mimeType: string; name: string; path: string; probeError: string | null; videoCodec: string | null };
 type CodecInventoryResult = {
   error?: string;
   inventory?: {
@@ -32,33 +19,33 @@ type CodecInventoryResult = {
   probe?: { ffprobeAvailable: boolean; probed: ProbedCandidate[]; skippedCount: number } | null;
 };
 
-function gb(bytes: number) {
-  return (bytes / 1024 ** 3).toFixed(2);
-}
+const gb = (bytes: number) => (bytes / 1024 ** 3).toFixed(2);
+const isRiskyCodec = (codec: string | null) => codec !== null && codec !== "h264" && codec !== "aac";
 
-function isRiskyCodec(codec: string | null) {
-  return codec !== null && codec !== "h264" && codec !== "aac";
+function Group({ group, warn }: { group: ContainerGroup; warn?: boolean }) {
+  return (
+    <div className="counter" style={warn ? { boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent)" } : undefined}>
+      <span className="mono">{group.mimeType}</span>
+      <strong>{group.lessonCount}</strong>
+      <span>{gb(group.byteSize)} GB</span>
+    </div>
+  );
 }
 
 export function CodecInventoryPanel() {
   const [busy, setBusy] = useState<"probe" | "scan" | null>(null);
-  const [error, setError] = useState("");
   const [result, setResult] = useState<CodecInventoryResult | null>(null);
 
   async function analyze(probeCodecs: boolean) {
     setBusy(probeCodecs ? "probe" : "scan");
-    setError("");
     try {
-      const response = await fetch("/api/drive-token/sync", {
-        body: JSON.stringify({ mode: "codec-inventory", probeCodecs }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
+      const response = await fetch("/api/drive-token/sync", { body: JSON.stringify({ mode: "codec-inventory", probeCodecs }), headers: { "content-type": "application/json" }, method: "POST" });
       const data = (await response.json()) as CodecInventoryResult;
       if (!response.ok || data.error) throw new Error(data.error ?? "No se pudo analizar la biblioteca.");
       setResult(data);
+      toast("Análisis completado.", "success");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "No se pudo analizar la biblioteca.");
+      toast(caught instanceof Error ? caught.message : "No se pudo analizar la biblioteca.", "error");
     } finally {
       setBusy(null);
     }
@@ -68,115 +55,54 @@ export function CodecInventoryPanel() {
   const probe = result?.probe;
 
   return (
-    <section className="admin-panel admin-reveal mt-8 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <section className="panel panel-pad">
+      <div className="panel-head">
         <div>
-          <h2 className="text-lg font-semibold">Códecs y tamaños</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-400">
-            Solo lectura de Drive: agrupa las lecciones por contenedor antes de una importación masiva y, si pides el
-            sondeo, confirma el códec real de los contenedores que no son MP4/H.264/AAC.
-          </p>
+          <p className="kicker">Diagnóstico</p>
+          <h2 className="title-m">Códecs y tamaños</h2>
+          <p>Solo lectura. Agrupa las lecciones por contenedor y, con el sondeo, confirma el códec real de lo que no es MP4/H.264/AAC.</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            className="rounded-xl border border-sky-400/50 px-4 py-2 text-sm font-semibold text-sky-100 disabled:opacity-50"
-            disabled={busy !== null}
-            onClick={() => void analyze(false)}
-            type="button"
-          >
-            {busy === "scan" ? "Escaneando…" : "Analizar tamaños"}
-          </button>
-          <button
-            className="rounded-xl border border-amber-400/50 px-4 py-2 text-sm font-semibold text-amber-100 disabled:opacity-50"
-            disabled={busy !== null}
-            onClick={() => void analyze(true)}
-            type="button"
-          >
-            {busy === "probe" ? "Sondeando…" : "Sondear códecs a revisar"}
-          </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button className="btn btn-ghost" disabled={busy !== null} onClick={() => void analyze(false)} type="button"><Icon name="grid" />{busy === "scan" ? "Escaneando…" : "Analizar tamaños"}</button>
+          <button className="btn btn-ghost" disabled={busy !== null} onClick={() => void analyze(true)} type="button"><Icon name="search" />{busy === "probe" ? "Sondeando…" : "Sondear códecs"}</button>
         </div>
       </div>
 
-      {error ? <p className="mt-4 rounded-xl border border-rose-400/40 bg-rose-400/10 p-3 text-sm text-rose-100">{error}</p> : null}
+      {busy ? <div className="progress-block"><div className="progress-meta"><span>Leyendo Drive…</span><span className="orbit-loader" style={{ "--size": "22px" } as CSSProperties}><span /></span></div></div> : null}
 
       {inventory ? (
-        <div className="mt-5 space-y-4">
+        <div style={{ display: "grid", gap: 18 }}>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase">Contenedores seguros (MP4/AAC ya validados)</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {inventory.safeContainers.map((group) => (
-                <div className="rounded-xl bg-slate-950 p-3" key={group.mimeType}>
-                  <p className="text-xs text-slate-400">{group.mimeType}</p>
-                  <p className="mt-1 text-lg font-semibold">{group.lessonCount} lecciones</p>
-                  <p className="text-xs text-slate-500">{gb(group.byteSize)} GB</p>
-                </div>
-              ))}
-              {inventory.safeContainers.length === 0 ? <p className="text-sm text-slate-500">Ninguna todavía.</p> : null}
-            </div>
+            <p className="kicker kicker-plain" style={{ marginBottom: 8 }}>Contenedores seguros · {inventory.totalSafeLessons}</p>
+            <div className="counter-grid">{inventory.safeContainers.map((group) => <Group group={group} key={group.mimeType} />)}</div>
           </div>
-
           {inventory.totalReviewLessons > 0 ? (
             <div>
-              <p className="text-xs font-semibold text-amber-300 uppercase">
-                Contenedores a revisar ({inventory.totalReviewLessons})
-              </p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {inventory.reviewContainers.map((group) => (
-                  <div className="rounded-xl border border-amber-400/30 bg-slate-950 p-3" key={group.mimeType}>
-                    <p className="text-xs text-slate-400">{group.mimeType}</p>
-                    <p className="mt-1 text-lg font-semibold">{group.lessonCount} lecciones</p>
-                    <p className="text-xs text-slate-500">{gb(group.byteSize)} GB</p>
-                  </div>
-                ))}
-              </div>
-
+              <p className="kicker kicker-plain" style={{ color: "var(--gold)", marginBottom: 8 }}>A revisar · {inventory.totalReviewLessons}</p>
+              <div className="counter-grid">{inventory.reviewContainers.map((group) => <Group group={group} key={group.mimeType} warn />)}</div>
               {probe ? (
                 probe.ffprobeAvailable ? (
-                  <ul className="mt-3 space-y-2">
+                  <ul className="probe-list">
                     {probe.probed.map((candidate) => (
-                      <li className="rounded-lg bg-slate-950 p-3" key={candidate.driveFileId}>
-                        <p className="text-sm font-medium text-slate-100">{candidate.name}</p>
-                        <p className="mt-1 break-all text-xs text-slate-400">{candidate.path}</p>
-                        {candidate.probeError ? (
-                          <p className="mt-1 text-xs text-rose-300">No se pudo analizar: {candidate.probeError}</p>
-                        ) : (
-                          <p className="mt-1 text-xs">
-                            <span className={isRiskyCodec(candidate.videoCodec) ? "text-amber-300" : "text-emerald-300"}>
-                              video: {candidate.videoCodec ?? "desconocido"}
-                            </span>
-                            {" · "}
-                            <span className={isRiskyCodec(candidate.audioCodec) ? "text-amber-300" : "text-emerald-300"}>
-                              audio: {candidate.audioCodec ?? "desconocido"}
-                            </span>
-                          </p>
+                      <li key={candidate.driveFileId}>
+                        <strong>{candidate.name}</strong>
+                        <small>{candidate.path}</small>
+                        {candidate.probeError ? <small style={{ color: "var(--rose)" }}>No se pudo analizar: {candidate.probeError}</small> : (
+                          <small>
+                            <span style={{ color: isRiskyCodec(candidate.videoCodec) ? "var(--gold)" : "var(--mint)" }}>vídeo: {candidate.videoCodec ?? "desconocido"}</span>{" · "}
+                            <span style={{ color: isRiskyCodec(candidate.audioCodec) ? "var(--gold)" : "var(--mint)" }}>audio: {candidate.audioCodec ?? "desconocido"}</span>
+                          </small>
                         )}
                       </li>
                     ))}
-                    {probe.skippedCount > 0 ? (
-                      <p className="text-xs text-slate-500">
-                        {probe.skippedCount} archivo(s) más no se sondearon en esta ejecución.
-                      </p>
-                    ) : null}
+                    {probe.skippedCount > 0 ? <li className="subtle">{probe.skippedCount} archivo(s) más no se sondearon en esta ejecución.</li> : null}
                   </ul>
-                ) : (
-                  <p className="mt-3 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">
-                    ffprobe no está instalado localmente (o no está en el PATH). Instala ffmpeg para confirmar el
-                    códec real; mientras tanto solo se muestran los contenedores sospechosos por tipo.
-                  </p>
-                )
+                ) : <div className="notice notice-warn" style={{ marginTop: 12 }}><span className="notice-icon"><Icon name="warning" /></span><div>ffprobe no está en el PATH. Instala ffmpeg para confirmar el códec real.</div></div>
               ) : (
-                <ul className="mt-3 space-y-1">
-                  {inventory.reviewCandidates.map((candidate) => (
-                    <li className="break-all text-xs text-slate-400" key={candidate.driveFileId}>
-                      {candidate.path} — {candidate.mimeType}
-                    </li>
-                  ))}
-                </ul>
+                <ul className="probe-list">{inventory.reviewCandidates.map((candidate) => <li key={candidate.driveFileId}><small>{candidate.path} — {candidate.mimeType}</small></li>)}</ul>
               )}
             </div>
-          ) : (
-            <p className="text-sm text-emerald-300">Ninguna lección usa un contenedor fuera de la ruta segura MP4.</p>
-          )}
+          ) : <div className="notice notice-ok"><span className="notice-icon"><Icon name="check" /></span><div>Ninguna lección usa un contenedor fuera de la ruta segura MP4.</div></div>}
         </div>
       ) : null}
     </section>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { DRIVE_WORKER_URL } from "@/lib/media/drive-worker";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type State = { kind: "loading" } | { kind: "ready"; title: string; source: string } | { kind: "error"; message: string };
@@ -29,7 +30,7 @@ export default function DriveServiceWorkerTestPage() {
           .maybeSingle<{ drive_file_id: string }>();
         if (!item) throw new Error("No se encontró el archivo de Drive.");
 
-        const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        const registration = await navigator.serviceWorker.register(DRIVE_WORKER_URL, { scope: "/" });
         await navigator.serviceWorker.ready;
         const tokenResponse = await fetch("/api/drive-token", { cache: "no-store" });
         if (!tokenResponse.ok) throw new Error("No hay una autorización de Drive activa. Vuelve a autorizar.");

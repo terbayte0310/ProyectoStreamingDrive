@@ -132,3 +132,18 @@ test("the emergency fuse blocks a new request before Drive", async () => {
   assert.equal(response?.status, 429);
   assert.equal(worker.fetchCalls.some((call) => call.url.startsWith("https://www.googleapis.com/drive/")), false);
 });
+
+test("after an approved reservation the next read reserves and downloads in parallel", async () => {
+  const worker = createWorkerHarness(200);
+  worker.message({ token: "active-token", type: "drive-access-token" });
+  await worker.stream();
+  worker.fetchCalls.length = 0;
+
+  const response = await worker.stream();
+  const reserveIndex = worker.fetchCalls.findIndex((call) => call.url === "/api/transfer-budget");
+  const driveIndex = worker.fetchCalls.findIndex((call) => call.url.startsWith("https://www.googleapis.com/drive/"));
+
+  assert.equal(response?.status, 206);
+  // Ambas peticiones salen en el mismo turno: la descarga no espera a la reserva.
+  assert.ok(reserveIndex >= 0 && driveIndex === reserveIndex + 1);
+});

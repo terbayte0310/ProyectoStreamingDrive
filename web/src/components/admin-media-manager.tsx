@@ -1,410 +1,558 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { type CSSProperties, type FormEvent, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+
+import { SegmentedThumb } from "@/components/catalog-collection";
+import { Icon } from "@/components/icons";
+import { MediaPoster, tmdbImage } from "@/components/media-catalog";
 import { MediaInventoryImport } from "@/components/media-inventory-import";
 import { PublishReadyMedia } from "@/components/publish-ready-media";
+import { toast } from "@/components/toaster";
+import { AdminTabs } from "@/components/ui/admin-tabs";
+import { confirmDialog } from "@/components/ui/confirm";
 
 type MediaKind = "movie" | "series" | "season" | "episode";
 type MediaStatus = "draft" | "published";
 
-export type AdminMediaRecord = {
-  admin_code: string | null;
-  admin_title: string;
-  episode_number?: number;
-  id: string;
-  internal_code: string;
-  season_id?: string;
-  season_number?: number;
-  status: MediaStatus;
-};
-
+export type AdminMediaRecord = { admin_code: string | null; admin_title: string; episode_number?: number; id: string; internal_code: string; season_id?: string; season_number?: number; status: MediaStatus };
 export type TmdbMetadata = {
-  backdrop_path: string | null;
-  episode_id: string | null;
-  genres: Array<{ id: number; name: string }>;
-  id: string;
-  localized_title: string | null;
-  movie_id?: string | null;
-  original_title: string | null;
-  overview: string | null;
-  poster_path: string | null;
-  release_date: string | null;
-  runtime_minutes: number | null;
-  season_id: string | null;
-  series_id: string | null;
-  synced_at: string | null;
-  tmdb_id: number | null;
-  tmdb_url: string | null;
-  vote_average: number | null;
-  vote_count: number | null;
+  backdrop_path: string | null; episode_id: string | null; genres: Array<{ id: number; name: string }>; id: string; localized_title: string | null; movie_id?: string | null;
+  original_title: string | null; overview: string | null; poster_path: string | null; release_date: string | null; runtime_minutes: number | null; season_id: string | null;
+  series_id: string | null; synced_at: string | null; tmdb_id: number | null; tmdb_url: string | null; vote_average: number | null; vote_count: number | null;
 };
 
 type Selection = { id: string; kind: MediaKind } | null;
 type TmdbSearchResult = { id: number; originalTitle: string | null; posterPath: string | null; releaseDate: string | null; title: string | null };
-type PlaybackSource = { drive_root_folder_id: string; id: string; is_active: boolean; name: string };
+export type PlaybackSource = { drive_root_folder_id: string; id: string; is_active: boolean; name: string };
 type PlaybackPackage = { drive_root_folder_id: string; episode_id: string | null; id: string; last_error: string | null; movie_id: string | null; source_id: string; status: "draft" | "ready" | "review" | "unavailable" };
 
-function titleFor(record: AdminMediaRecord) {
-  return record.admin_title || record.internal_code;
+const kindLabel: Record<MediaKind, string> = { episode: "Episodio", movie: "Película", season: "Temporada", series: "Serie" };
+const packageBadge: Record<PlaybackPackage["status"], string> = { draft: "badge badge-gold badge-dot", ready: "badge badge-mint badge-dot", review: "badge badge-gold badge-dot", unavailable: "badge badge-rose badge-dot" };
+const packageLabel: Record<PlaybackPackage["status"], string> = { draft: "Borrador", ready: "Listo", review: "En revisión", unavailable: "No disponible" };
+const titleFor = (record: AdminMediaRecord) => record.admin_title || record.internal_code;
+const normalized = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
+
+type SeriesPayload = { episodes: AdminMediaRecord[]; metadata: TmdbMetadata[]; seasons: AdminMediaRecord[] };
+
+async function fetchSeries(seriesId: string): Promise<SeriesPayload> {
+  const response = await fetch(`/api/admin/media?seriesId=${encodeURIComponent(seriesId)}`, { cache: "no-store" });
+  const result = await response.json() as Partial<SeriesPayload> & { error?: string };
+  if (!response.ok || !result.seasons || !result.episodes || !result.metadata) throw new Error(result.error ?? "No se pudo cargar la serie.");
+  return { episodes: result.episodes, metadata: result.metadata, seasons: result.seasons };
 }
 
-function statusLabel(status: MediaStatus) {
-  return status === "published" ? "Publicado" : "Borrador";
+async function fetchPlaybackConfiguration() {
+  const response = await fetch("/api/drive-token/media-playback", { cache: "no-store" });
+  const result = await response.json().catch(() => ({})) as { packages?: PlaybackPackage[]; sources?: PlaybackSource[] };
+  return response.ok ? { packages: result.packages ?? [], sources: result.sources ?? [] } : null;
 }
 
-export function AdminMediaManager({
-  initialMetadata,
-  initialMovies,
-  initialSeries,
-}: {
-  initialMetadata: TmdbMetadata[];
-  initialMovies: AdminMediaRecord[];
-  initialSeries: AdminMediaRecord[];
-}) {
+async function postJson<T>(url: string, body: object) {
+  const response = await fetch(url, { body: JSON.stringify(body), headers: { "Content-Type": "application/json" }, method: "POST" });
+  const result = await response.json().catch(() => ({})) as T & { error?: string };
+  if (!response.ok) throw new Error(result.error ?? "La operación no se pudo completar.");
+  return result;
+}
+
+export function AdminMediaManager({ initialMetadata, initialMovies, initialSeries }: { initialMetadata: TmdbMetadata[]; initialMovies: AdminMediaRecord[]; initialSeries: AdminMediaRecord[] }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"movies" | "series">("movies");
+  const [tab, setTab] = useState<"movies" | "series">(initialMovies.length || !initialSeries.length ? "movies" : "series");
   const [movies, setMovies] = useState(initialMovies);
   const [series, setSeries] = useState(initialSeries);
   const [metadata, setMetadata] = useState(initialMetadata);
   const [seasons, setSeasons] = useState<AdminMediaRecord[]>([]);
   const [episodes, setEpisodes] = useState<AdminMediaRecord[]>([]);
-  const [activeSeriesId, setActiveSeriesId] = useState<string | null>(initialSeries[0]?.id ?? null);
+  const [activeSeriesId, setActiveSeriesId] = useState<string | null>(!initialMovies[0] && initialSeries[0] ? initialSeries[0].id : null);
   const [selection, setSelection] = useState<Selection>(initialMovies[0] ? { id: initialMovies[0].id, kind: "movie" } : initialSeries[0] ? { id: initialSeries[0].id, kind: "series" } : null);
   const [busy, setBusy] = useState("");
-  const [message, setMessage] = useState("");
-  const [search, setSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<TmdbSearchResult[]>([]);
-  const [playbackSources, setPlaybackSources] = useState<PlaybackSource[]>([]);
-  const [playbackPackages, setPlaybackPackages] = useState<PlaybackPackage[]>([]);
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [sources, setSources] = useState<PlaybackSource[]>([]);
+  const [packages, setPackages] = useState<PlaybackPackage[]>([]);
 
+  const loadPlaybackConfiguration = useCallback(async () => {
+    const result = await fetchPlaybackConfiguration();
+    if (result) { setSources(result.sources); setPackages(result.packages); }
+  }, []);
   useEffect(() => {
-    void (async () => {
-      const response = await fetch("/api/drive-token/media-playback", { cache: "no-store" });
-      const result = await response.json().catch(() => ({})) as { packages?: PlaybackPackage[]; sources?: PlaybackSource[] };
-      if (response.ok) { setPlaybackSources(result.sources ?? []); setPlaybackPackages(result.packages ?? []); }
-    })();
+    let active = true;
+    void fetchPlaybackConfiguration().then((result) => { if (active && result) { setSources(result.sources); setPackages(result.packages); } });
+    return () => { active = false; };
   }, []);
 
-  async function loadPlaybackConfiguration() {
-    const response = await fetch("/api/drive-token/media-playback", { cache: "no-store" });
-    const result = await response.json().catch(() => ({})) as { packages?: PlaybackPackage[]; sources?: PlaybackSource[] };
-    if (response.ok) {
-      setPlaybackSources(result.sources ?? []);
-      setPlaybackPackages(result.packages ?? []);
-    }
-  }
   const selected = useMemo(() => {
     if (!selection) return null;
-    if (selection.kind === "movie") return movies.find((item) => item.id === selection.id) ?? null;
-    if (selection.kind === "series") return series.find((item) => item.id === selection.id) ?? null;
-    if (selection.kind === "season") return seasons.find((item) => item.id === selection.id) ?? null;
-    return episodes.find((item) => item.id === selection.id) ?? null;
+    const pool = selection.kind === "movie" ? movies : selection.kind === "series" ? series : selection.kind === "season" ? seasons : episodes;
+    return pool.find((item) => item.id === selection.id) ?? null;
   }, [episodes, movies, seasons, selection, series]);
 
+  const list = useMemo(() => {
+    const needle = normalized(deferredQuery.trim());
+    return (tab === "movies" ? movies : series).filter((item) => !needle || normalized(`${item.admin_title} ${item.internal_code} ${item.admin_code ?? ""}`).includes(needle));
+  }, [deferredQuery, movies, series, tab]);
+
+  function applySeries(seriesId: string, result: SeriesPayload) {
+    setSeasons(result.seasons);
+    setEpisodes(result.episodes);
+    setMetadata((current) => [...current.filter((entry) => entry.series_id !== seriesId && !result.seasons.some((season) => season.id === entry.season_id) && !result.episodes.some((episode) => episode.id === entry.episode_id)), ...result.metadata]);
+  }
+
   async function loadSeries(seriesId: string) {
-    setBusy("load:" + seriesId);
+    setBusy(`load:${seriesId}`);
     try {
-      const response = await fetch("/api/admin/media?seriesId=" + encodeURIComponent(seriesId), { cache: "no-store" });
-      const result = await response.json() as { episodes?: AdminMediaRecord[]; error?: string; metadata?: TmdbMetadata[]; seasons?: AdminMediaRecord[] };
-      if (!response.ok || !result.seasons || !result.episodes || !result.metadata) throw new Error(result.error ?? "No se pudo cargar la serie.");
-      setSeasons(result.seasons);
-      setEpisodes(result.episodes);
-      setMetadata((current) => [...current.filter((entry) => entry.series_id !== seriesId && !result.seasons!.some((season) => season.id === entry.season_id) && !result.episodes!.some((episode) => episode.id === entry.episode_id)), ...result.metadata!]);
+      applySeries(seriesId, await fetchSeries(seriesId));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo cargar la serie.");
+      toast(error instanceof Error ? error.message : "No se pudo cargar la serie.", "error");
     } finally {
       setBusy("");
     }
   }
 
+  // Si la vista abre directamente una serie, su estructura se carga al montar.
+  useEffect(() => {
+    const initialSeries = activeSeriesId;
+    if (!initialSeries) return;
+    let active = true;
+    fetchSeries(initialSeries).then((result) => { if (active) applySeries(initialSeries, result); }, (error: unknown) => toast(error instanceof Error ? error.message : "No se pudo cargar la serie.", "error"));
+    return () => { active = false; };
+    // Solo en el montaje: las selecciones posteriores llaman a loadSeries directamente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function choose(kind: MediaKind, id: string) {
-    if (kind === "series") {
+    setSelection({ id, kind });
+    if (kind === "series" && activeSeriesId !== id) {
       setActiveSeriesId(id);
+      setSeasons([]);
+      setEpisodes([]);
       void loadSeries(id);
     }
-    setSelection({ id, kind });
-    setMessage("");
-    setSearch("");
-    setSearchResults([]);
-  }
-
-  function currentMetadata() {
-    if (!selection) return null;
-    const relation = selection.kind + "_id";
-    return metadata.find((entry) => (entry as Record<string, unknown>)[relation] === selection.id) ?? null;
   }
 
   function replaceRecord(kind: MediaKind, item: AdminMediaRecord) {
-    const replace = (records: AdminMediaRecord[]) => records.map((record) => record.id === item.id ? { ...record, ...item } : record);
-    if (kind === "movie") setMovies(replace);
-    else if (kind === "series") setSeries(replace);
-    else if (kind === "season") setSeasons(replace);
-    else setEpisodes(replace);
+    const replace = (records: AdminMediaRecord[]) => records.map((record) => (record.id === item.id ? { ...record, ...item } : record));
+    if (kind === "movie") setMovies(replace); else if (kind === "series") setSeries(replace); else if (kind === "season") setSeasons(replace); else setEpisodes(replace);
   }
 
-  async function requestMedia(body: object) {
-    const response = await fetch("/api/admin/media", {
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    });
-    const result = await response.json() as { error?: string; item?: AdminMediaRecord };
-    if (!response.ok || !result.item) throw new Error(result.error ?? "No se pudo guardar el contenido.");
-    return result.item;
-  }
-
-  async function createRecord(event: FormEvent<HTMLFormElement>, kind: "movie" | "series" | "season" | "episode", parentId?: string) {
+  async function createRecord(event: FormEvent<HTMLFormElement>, kind: MediaKind, parentId?: string) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("create:" + kind);
-    setMessage("");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setBusy(`create:${kind}`);
     try {
-      const item = await requestMedia({
-        action: "create",
-        adminCode: form.get("adminCode"),
-        kind,
-        parentId,
-        status: form.get("status"),
-        title: form.get("title"),
-      });
+      const { item } = await postJson<{ item?: AdminMediaRecord }>("/api/admin/media", { action: "create", adminCode: form.get("adminCode"), kind, parentId, status: form.get("status") ?? "draft", title: form.get("title") });
+      if (!item) throw new Error("No se pudo crear el contenido.");
       if (kind === "movie") setMovies((current) => [...current, item]);
       else if (kind === "series") setSeries((current) => [...current, item]);
-      else if (kind === "season") {
-        if (parentId) await loadSeries(parentId);
-      } else if (parentId && activeSeriesId) {
-        await loadSeries(activeSeriesId);
-      }
+      else if (activeSeriesId) await loadSeries(activeSeriesId);
       choose(kind, item.id);
-      event.currentTarget.reset();
-      setMessage("Contenido creado.");
+      formElement.reset();
+      toast(`${kindLabel[kind]} creada: ${titleFor(item)}.`, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo crear el contenido.");
+      toast(error instanceof Error ? error.message : "No se pudo crear el contenido.", "error");
     } finally {
       setBusy("");
     }
   }
 
-  async function saveRecord(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selection || !selected) return;
-    const form = new FormData(event.currentTarget);
-    setBusy("save:" + selected.id);
-    setMessage("");
-    try {
-      const item = await requestMedia({
-        action: "update",
-        adminCode: form.get("adminCode"),
-        contentId: selected.id,
-        kind: selection.kind,
-        status: form.get("status"),
-        title: form.get("title"),
-      });
-      replaceRecord(selection.kind, item);
-      setMessage("Contenido guardado.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo guardar el contenido.");
-    } finally {
-      setBusy("");
-    }
-  }
+  const currentMetadata = selection ? metadata.find((entry) => (entry as Record<string, unknown>)[`${selection.kind}_id`] === selection.id) ?? null : null;
+  const parentSeries = activeSeriesId ? series.find((item) => item.id === activeSeriesId) : undefined;
+  const selectedSeason = selection?.kind === "episode" ? seasons.find((season) => season.id === selected?.season_id) : selection?.kind === "season" ? seasons.find((season) => season.id === selection.id) : undefined;
+  const playbackPackage = selection ? packages.find((entry) => (selection.kind === "movie" ? entry.movie_id === selection.id : selection.kind === "episode" ? entry.episode_id === selection.id : false)) : undefined;
 
-  async function searchTmdb(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selection || (selection.kind !== "movie" && selection.kind !== "series") || !search.trim()) return;
-    setBusy("search");
-    setMessage("");
-    try {
-      const response = await fetch("/api/admin/tmdb", {
-        body: JSON.stringify({ action: "search", contentKind: selection.kind, query: search.trim() }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const result = await response.json() as { error?: string; results?: TmdbSearchResult[] };
-      if (!response.ok || !result.results) throw new Error(result.error ?? "No se pudo buscar en TMDB.");
-      setSearchResults(result.results);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo buscar en TMDB.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function tmdbAction(action: "link" | "refresh" | "unlink", tmdbId?: number) {
-    if (!selection) return;
-    if (action === "unlink" && !window.confirm("Se eliminará la asociación y la caché de TMDB, pero no el contenido interno. ¿Continuar?")) return;
-    setBusy("tmdb:" + action);
-    setMessage("");
-    try {
-      const response = await fetch("/api/admin/tmdb", {
-        body: JSON.stringify({ action, contentId: selection.id, contentKind: selection.kind, tmdbId }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "No se pudo actualizar TMDB.");
-      setSearchResults([]);
-      setSearch("");
-      router.refresh();
-      if (selection.kind === "series") await loadSeries(selection.id);
-      setMessage(action === "unlink" ? "TMDB desvinculado." : "Caché de TMDB actualizada.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo actualizar TMDB.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function createPlaybackSource(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy("playback-source"); setMessage("");
-    try {
-      const response = await fetch("/api/drive-token/media-playback", { body: JSON.stringify({ action: "create-source", driveRootFolderId: form.get("driveRootFolderId"), name: form.get("name") }), headers: { "Content-Type": "application/json" }, method: "POST" });
-      const result = await response.json() as { error?: string; source?: PlaybackSource };
-      if (!response.ok || !result.source) throw new Error(result.error ?? "No se pudo guardar la fuente.");
-      setPlaybackSources((current) => [...current, result.source!]); event.currentTarget.reset(); setMessage("Fuente de Drive guardada.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar la fuente."); } finally { setBusy(""); }
-  }
-
-  async function scanPlaybackPackage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selection || (selection.kind !== "movie" && selection.kind !== "episode")) return;
-    const form = new FormData(event.currentTarget);
-    setBusy("playback-scan"); setMessage("");
-    try {
-      const response = await fetch("/api/drive-token/media-playback", { body: JSON.stringify({ action: "scan", contentId: selection.id, contentKind: selection.kind, driveRootFolderId: form.get("driveRootFolderId"), sourceId: form.get("sourceId") }), headers: { "Content-Type": "application/json" }, method: "POST" });
-      const result = await response.json() as { error?: string; packageId?: string; scannedAssets?: number; status?: PlaybackPackage["status"] };
-      if (!response.ok || !result.packageId || !result.status) throw new Error(result.error ?? "No se pudo escanear el paquete HLS.");
-      const relation = selection.kind === "movie" ? { movie_id: selection.id } : { episode_id: selection.id };
-      setPlaybackPackages((current) => [...current.filter((entry) => entry.movie_id !== selection.id && entry.episode_id !== selection.id), { drive_root_folder_id: String(form.get("driveRootFolderId")), episode_id: relation.episode_id ?? null, id: result.packageId!, last_error: null, movie_id: relation.movie_id ?? null, source_id: String(form.get("sourceId")), status: result.status! }]);
-      setMessage(`Paquete HLS listo: ${result.scannedAssets ?? 0} archivos registrados.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo escanear el paquete HLS."); } finally { setBusy(""); }
-  }
-
-  async function scanPendingPlaybackPackages(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const sourceId = String(form.get("sourceId") ?? "");
-    if (!sourceId) return;
-
-    setBusy("playback-batch");
-    setMessage("");
-    let scannedCount = 0;
-    let scannedAssets = 0;
-    let remaining = 0;
-    let failures = 0;
-    let missingContent = 0;
-    let duplicates = 0;
-
-    try {
-      do {
-        const response = await fetch("/api/admin/media-playback/batch", {
-          body: JSON.stringify({ sourceId }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        });
-        const result = await response.json().catch(() => ({})) as {
-          duplicateCodes?: string[];
-          error?: string;
-          errors?: Array<{ internalCode: string; message: string }>;
-          missingContentCodes?: string[];
-          remaining?: number;
-          scanned?: Array<{ assets: number; internalCode: string }>;
-        };
-        if (!response.ok) throw new Error(result.error ?? "No se pudo sincronizar los paquetes pendientes.");
-
-        const currentScanned = result.scanned ?? [];
-        scannedCount += currentScanned.length;
-        scannedAssets += currentScanned.reduce((total, item) => total + item.assets, 0);
-        failures += result.errors?.length ?? 0;
-        missingContent = result.missingContentCodes?.length ?? 0;
-        duplicates = result.duplicateCodes?.length ?? 0;
-        remaining = result.remaining ?? 0;
-        if (!currentScanned.length) break;
-      } while (remaining > 0);
-
-      await loadPlaybackConfiguration();
-      const notes = [
-        failures ? `${failures} con error` : "",
-        missingContent ? `${missingContent} sin contenido registrado` : "",
-        duplicates ? `${duplicates} códigos duplicados en Drive` : "",
-      ].filter(Boolean);
-      setMessage(`Sincronización terminada: ${scannedCount} paquetes y ${scannedAssets} archivos registrados.${notes.length ? ` Revisión: ${notes.join(", ")}.` : ""}`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudieron sincronizar los paquetes pendientes.");
-    } finally {
-      setBusy("");
-    }
-  }
-  const meta = currentMetadata();
-  const isSeriesDraft = selection?.kind === "season" || selection?.kind === "episode"
-    ? series.find((item) => item.id === activeSeriesId)?.status === "draft"
-    : false;
-  const supportsPlayback = selection?.kind === "movie" || selection?.kind === "episode";
-  const playbackPackage = selection ? playbackPackages.find((entry) => selection.kind === "movie" ? entry.movie_id === selection.id : selection.kind === "episode" ? entry.episode_id === selection.id : false) : null;
-
-  return (
-    <section className="admin-manager admin-reveal mt-8 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="admin-panel p-3">
-        <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl bg-slate-950/5 p-1">
-          <button className={tab === "movies" ? "rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white" : "rounded-lg px-3 py-2 text-sm"} onClick={() => { setTab("movies"); if (movies[0]) choose("movie", movies[0].id); }} type="button">Movies</button>
-          <button className={tab === "series" ? "rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white" : "rounded-lg px-3 py-2 text-sm"} onClick={() => { setTab("series"); if (series[0]) choose("series", series[0].id); }} type="button">Series</button>
+  const catalog = (
+    <div className="workspace">
+      <aside aria-label="Contenido" className="panel master">
+        <div className="master-tools">
+          <div aria-label="Tipo de contenido" className="segmented" role="group" style={{ width: "100%" }}>
+            <SegmentedThumb index={tab === "movies" ? 0 : 1} />
+            <button aria-pressed={tab === "movies"} onClick={() => { setTab("movies"); if (movies[0]) choose("movie", movies[0].id); }} type="button">Películas · {movies.length}</button>
+            <button aria-pressed={tab === "series"} onClick={() => { setTab("series"); if (series[0]) choose("series", series[0].id); }} type="button">Series · {series.length}</button>
+          </div>
+          <label className="search-box">
+            <Icon name="search" />
+            <span className="sr-only">Buscar</span>
+            <input className="input" onChange={(event) => setQuery(event.target.value)} placeholder="Título o código" type="search" value={query} />
+          </label>
         </div>
-        <h2 className="px-2 pb-2 font-semibold">{tab === "movies" ? "Películas" : "Series"}</h2>
-        <div className="flex max-h-[48vh] flex-col gap-1 overflow-y-auto">
-          {(tab === "movies" ? movies : series).map((item) => (
-            <button aria-current={selection?.id === item.id ? "true" : undefined} className={"admin-course-option px-3 py-3 text-left text-sm " + (selection?.id === item.id ? "admin-course-option-active" : "")} key={item.id} onClick={() => choose(tab === "movies" ? "movie" : "series", item.id)} type="button">
-              {titleFor(item)}
-              <span className="ml-2 text-xs text-slate-400">{statusLabel(item.status)}</span>
-            </button>
-          ))}
+        <div className="master-list">
+          {list.map((item) => {
+            const current = selection?.id === item.id || (tab === "series" && activeSeriesId === item.id && (selection?.kind === "season" || selection?.kind === "episode"));
+            return (
+              <button aria-current={current} className="master-item" key={item.id} onClick={() => choose(tab === "movies" ? "movie" : "series", item.id)} type="button">
+                <span>{titleFor(item)}<br /><small className="mono subtle">{item.internal_code}</small></span>
+                <span className="status-dot" data-status={item.status} title={item.status === "published" ? "Publicado" : "Borrador"} />
+              </button>
+            );
+          })}
+          {!list.length ? <p className="muted" style={{ margin: 0, padding: "0.8rem" }}>Nada coincide.</p> : null}
         </div>
-        <form className="mt-4 grid gap-2 border-t border-slate-200 pt-4" onSubmit={(event) => void createRecord(event, tab === "movies" ? "movie" : "series")}>
-          <input aria-label={"Nueva " + (tab === "movies" ? "película" : "serie")} className="admin-input rounded-lg border px-3 py-2 text-sm" name="title" placeholder={tab === "movies" ? "Nueva película" : "Nueva serie"} required />
-          <input aria-label="Código legible opcional" className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código legible opcional" />
-          <select className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue="draft" name="status"><option value="draft">Borrador</option><option value="published">Publicado</option></select>
-          <button className="primary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} type="submit">Crear</button>
+        <form className="master-foot" onSubmit={(event) => void createRecord(event, tab === "movies" ? "movie" : "series")} style={{ display: "grid", gap: 8 }}>
+          <input aria-label={tab === "movies" ? "Nueva película" : "Nueva serie"} className="input input-sm" name="title" placeholder={tab === "movies" ? "Nueva película" : "Nueva serie"} required />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input aria-label="Código legible opcional" className="input input-sm" name="adminCode" placeholder="Código (opcional)" />
+            <button className="btn btn-primary btn-sm" disabled={Boolean(busy)} type="submit"><Icon name="plus" />Crear</button>
+          </div>
         </form>
       </aside>
 
-      <div className="flex min-w-0 flex-col gap-6">
-        <MediaInventoryImport sources={playbackSources} />
-        <PublishReadyMedia sources={playbackSources} />
-        {selected ? (
-          <>
-            <form className="admin-panel p-6" key={selection?.kind + ":" + selected.id} onSubmit={saveRecord}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div><p className="eyebrow">{selection?.kind === "movie" ? "Película" : selection?.kind === "series" ? "Serie" : selection?.kind === "season" ? "Temporada" : "Episodio"}</p><h2 className="mt-1 text-2xl font-semibold">{titleFor(selected)}</h2></div>
-                <code className="rounded-lg bg-slate-950/5 px-3 py-2 text-xs">{selected.internal_code}</code>
-              </div>
-              {isSeriesDraft ? <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">La serie padre está en borrador: este contenido no será visible para lectores aunque esté publicado.</p> : null}
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-sm">Título administrativo<input className="admin-input rounded-lg border px-3 py-2" defaultValue={selected.admin_title} name="title" required /></label>
-                <label className="flex flex-col gap-1 text-sm">Código legible opcional<input className="admin-input rounded-lg border px-3 py-2" defaultValue={selected.admin_code ?? ""} name="adminCode" placeholder="HPPF-00001" /></label>
-                <label className="flex flex-col gap-1 text-sm">Estado<select className="admin-input rounded-lg border px-3 py-2" defaultValue={selected.status} name="status"><option value="draft">Borrador</option><option value="published">Publicado</option></select></label>
-                <p className="self-end text-sm text-slate-500">Código interno: <code>{selected.internal_code}</code></p>
-              </div>
-              <button className="primary-button mt-5 disabled:opacity-50" disabled={Boolean(busy)} type="submit">{busy === "save:" + selected.id ? "Guardando…" : "Guardar"}</button>
-            </form>
+      {selected && selection ? (
+        <div style={{ minWidth: 0 }}>
+          {(selection.kind === "season" || selection.kind === "episode") && parentSeries ? (
+            <nav aria-label="Ruta" className="breadcrumb" style={{ marginBottom: 10 }}>
+              <button onClick={() => choose("series", parentSeries.id)} type="button">{titleFor(parentSeries)}</button>
+              <Icon name="chevronRight" width={14} />
+              {selectedSeason ? <button onClick={() => choose("season", selectedSeason.id)} type="button">Temporada {selectedSeason.season_number}</button> : null}
+              {selection.kind === "episode" ? <><Icon name="chevronRight" width={14} /><span>Episodio {selected.episode_number}</span></> : null}
+            </nav>
+          ) : null}
 
-            <section className="admin-panel p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">Metadatos</p><h2 className="mt-1 text-xl font-semibold">TMDB</h2></div>{meta?.tmdb_url ? <a className="secondary-button text-sm" href={meta.tmdb_url} rel="noreferrer" target="_blank">Ver en TMDB ↗</a> : null}</div>
-              {meta ? <div className="mt-4 grid gap-4 sm:grid-cols-[7rem_minmax(0,1fr)]">{meta.poster_path ? <Image alt="" className="aspect-[2/3] w-28 rounded-xl object-cover" height={513} src={"https://image.tmdb.org/t/p/w342" + meta.poster_path} width={342} /> : null}<div><h3 className="font-semibold">{meta.localized_title ?? meta.original_title}</h3><p className="mt-1 text-sm text-slate-500">{meta.overview || "Sin sinopsis disponible."}</p><p className="mt-3 text-sm">{meta.genres.map((genre) => genre.name).join(" · ") || "Sin géneros"}{meta.release_date ? " · " + meta.release_date : ""}{meta.runtime_minutes !== null ? " · " + meta.runtime_minutes + " min" : ""}</p><p className="mt-2 text-xs text-slate-500">Caché actualizada: {meta.synced_at ? new Date(meta.synced_at).toLocaleString() : "sin fecha"}</p></div></div> : <p className="mt-4 text-sm text-slate-500">Todavía no hay datos cacheados de TMDB.</p>}
-              {selection?.kind === "movie" || selection?.kind === "series" ? <form className="mt-5 flex flex-wrap gap-2" onSubmit={(event) => void searchTmdb(event)}><input className="admin-input min-w-56 flex-1 rounded-lg border px-3 py-2 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar en TMDB" value={search} /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} type="submit">Buscar</button></form> : null}
-              {searchResults.length ? <div className="mt-3 grid gap-2">{searchResults.map((result) => <button className="rounded-xl border border-slate-200 p-3 text-left text-sm hover:border-blue-400" key={result.id} onClick={() => void tmdbAction("link", result.id)} type="button"><strong>{result.title ?? result.originalTitle ?? "Sin título"}</strong><span className="ml-2 text-slate-500">{result.releaseDate ?? ""}</span></button>)}</div> : null}
-              <div className="mt-5 flex flex-wrap gap-2">{(selection?.kind === "season" || selection?.kind === "episode") && !meta ? <button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void tmdbAction("link")} type="button">Vincular desde la serie</button> : null}{meta ? <><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void tmdbAction("refresh")} type="button">Refrescar</button><button className="rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={Boolean(busy)} onClick={() => void tmdbAction("unlink")} type="button">Desvincular</button></> : null}</div>
-              <p className="mt-4 text-xs text-slate-500">Datos e imágenes proporcionados por TMDB. Esta aplicación no está respaldada ni certificada por TMDB.</p>
+          <GeneralForm isParentDraft={(selection.kind === "season" || selection.kind === "episode") && parentSeries?.status === "draft"} key={`${selection.kind}:${selected.id}`} kind={selection.kind} onSaved={(item) => replaceRecord(selection.kind, item)} record={selected} />
+
+          {selection.kind === "series" ? (
+            <section className="panel panel-pad">
+              <div className="panel-head">
+                <div><p className="kicker">Estructura</p><h2 className="title-m">Temporadas y episodios</h2></div>
+                {busy === `load:${selected.id}` ? <span className="orbit-loader" style={{ "--size": "26px" } as CSSProperties}><span /></span> : null}
+              </div>
+              <form className="inline-form" onSubmit={(event) => void createRecord(event, "season", selected.id)} style={{ marginBottom: 14 }}>
+                <input className="input input-sm" name="title" placeholder="Título de nueva temporada" required />
+                <input className="input input-sm" name="adminCode" placeholder="Código opcional" style={{ flex: "0 1 160px" }} />
+                <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} type="submit"><Icon name="plus" />Temporada</button>
+              </form>
+              <div className="tree">
+                {seasons.map((season) => (
+                  <div className="tree-season" key={season.id}>
+                    <button onClick={() => choose("season", season.id)} type="button">
+                      <span>T{season.season_number} · {titleFor(season)}</span>
+                      <span className={season.status === "published" ? "badge badge-mint" : "badge badge-gold"}>{season.status === "published" ? "Publicada" : "Borrador"}</span>
+                    </button>
+                    <div className="tree-episodes">
+                      {episodes.filter((episode) => episode.season_id === season.id).map((episode) => {
+                        const hasPackage = packages.some((entry) => entry.episode_id === episode.id && entry.status === "ready");
+                        return (
+                          <button className="tree-episode" key={episode.id} onClick={() => choose("episode", episode.id)} type="button">
+                            <span><span className="mono subtle">E{String(episode.episode_number).padStart(2, "0")}</span> {titleFor(episode)}</span>
+                            <span style={{ display: "flex", gap: 6 }}>{hasPackage ? <span className="badge badge-mint">HLS</span> : null}<span className="status-dot" data-status={episode.status} /></span>
+                          </button>
+                        );
+                      })}
+                      <form className="inline-form" onSubmit={(event) => void createRecord(event, "episode", season.id)} style={{ padding: "0.4rem 0.2rem 0.2rem" }}>
+                        <input className="input input-sm" name="title" placeholder="Nuevo episodio" required />
+                        <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} type="submit"><Icon name="plus" />Episodio</button>
+                      </form>
+                    </div>
+                  </div>
+                ))}
+                {!seasons.length && busy !== `load:${selected.id}` ? <p className="muted" style={{ margin: 0 }}>Esta serie aún no tiene temporadas.</p> : null}
+              </div>
             </section>
+          ) : null}
 
-            {supportsPlayback ? <section className="admin-panel p-6"><div><p className="eyebrow">Reproducción</p><h2 className="mt-1 text-xl font-semibold">Paquete HLS en Drive</h2><p className="mt-2 text-sm text-slate-500">Usa una carpeta con <code>master.m3u8</code>, listas de vídeo/audio y subtítulos. El escaneo registra los archivos sin publicar enlaces directos.</p></div>{playbackPackage ? <p className={"mt-4 rounded-lg px-3 py-2 text-sm " + (playbackPackage.status === "ready" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900")}>Estado: <strong>{playbackPackage.status}</strong>{playbackPackage.last_error ? ` · ${playbackPackage.last_error}` : ""}</p> : <p className="mt-4 text-sm text-slate-500">Aún no hay paquete vinculado.</p>}<form className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void scanPlaybackPackage(event)}><select className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue="" name="sourceId" required><option disabled value="">Fuente de Drive</option>{playbackSources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select><input className="admin-input rounded-lg border px-3 py-2 text-sm" defaultValue={playbackPackage?.drive_root_folder_id ?? ""} name="driveRootFolderId" placeholder="ID de carpeta del paquete HLS" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy) || !playbackSources.some((source) => source.is_active)} type="submit">{busy === "playback-scan" ? "Escaneando…" : playbackPackage ? "Reescanear" : "Vincular y escanear"}</button></form><form className="mt-3 flex flex-wrap gap-3 border-t border-slate-200 pt-4" onSubmit={(event) => void scanPendingPlaybackPackages(event)}><select className="min-w-64 rounded-xl border border-slate-300 px-3 py-2" defaultValue="" name="sourceId" required><option disabled value="">Fuente de Drive para sincronizar</option>{playbackSources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select><button className="rounded-xl border border-slate-300 px-4 py-2 font-semibold disabled:opacity-50" disabled={busy === "playback-batch" || !playbackSources.length} type="submit">{busy === "playback-batch" ? "Sincronizando paquetes…" : "Sincronizar paquetes pendientes"}</button><p className="basis-full text-xs text-slate-500">Busca carpetas con códigos internos exactos. Vincula solo contenido existente, no publica nada y procesa grupos seguros hasta terminar.</p></form>{!playbackSources.length ? <form className="mt-5 grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void createPlaybackSource(event)}><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="name" placeholder="Nombre de fuente, p. ej. Medios" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="driveRootFolderId" placeholder="ID de carpeta raíz de Drive" required /><button className="secondary-button text-sm disabled:opacity-50" disabled={Boolean(busy)} type="submit">{busy === "playback-source" ? "Guardando…" : "Guardar fuente"}</button></form> : null}</section> : null}
+          <TmdbPanel
+            kind={selection.kind}
+            metadata={currentMetadata}
+            onChanged={async () => { router.refresh(); if (selection.kind !== "movie" && activeSeriesId) await loadSeries(activeSeriesId); }}
+            selectionId={selection.id}
+          />
 
-            {selection?.kind === "series" ? <section className="admin-panel p-6"><div className="flex items-center justify-between gap-3"><div><p className="eyebrow">Estructura</p><h2 className="mt-1 text-xl font-semibold">Temporadas y episodios</h2></div>{busy === "load:" + selected.id ? <span className="text-sm text-slate-500">Cargando…</span> : null}</div><form className="mt-4 flex flex-wrap gap-2" onSubmit={(event) => void createRecord(event, "season", selected.id)}><input className="admin-input min-w-56 flex-1 rounded-lg border px-3 py-2 text-sm" name="title" placeholder="Título de nueva temporada" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código opcional" /><input name="status" type="hidden" value="draft" /><button className="secondary-button text-sm" type="submit">Añadir temporada</button></form><div className="mt-4 grid gap-3">{seasons.map((season) => <div className="rounded-xl border border-slate-200 p-4" key={season.id}><button className="font-semibold" onClick={() => choose("season", season.id)} type="button">T{season.season_number}: {titleFor(season)}</button><span className="ml-2 text-xs text-slate-500">{statusLabel(season.status)}</span><div className="mt-3 grid gap-2 border-l-2 border-blue-100 pl-3">{episodes.filter((episode) => episode.season_id === season.id).map((episode) => <button className="text-left text-sm text-slate-600 hover:text-blue-600" key={episode.id} onClick={() => choose("episode", episode.id)} type="button">E{episode.episode_number}: {titleFor(episode)} · {statusLabel(episode.status)}</button>)}</div><form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => void createRecord(event, "episode", season.id)}><input className="admin-input min-w-48 flex-1 rounded-lg border px-3 py-2 text-sm" name="title" placeholder="Título de nuevo episodio" required /><input className="admin-input rounded-lg border px-3 py-2 text-sm" name="adminCode" placeholder="Código opcional" /><input name="status" type="hidden" value="draft" /><button className="secondary-button text-sm" type="submit">Añadir episodio</button></form></div>)}</div></section> : null}
-          </>
-        ) : <section className="admin-panel p-8 text-slate-500">Crea o selecciona una película o serie para comenzar.</section>}
-        {message ? <p className={message.includes("No se pudo") || message.includes("obligatorio") ? "text-rose-600" : "text-emerald-600"}>{message}</p> : null}
+          {selection.kind === "movie" || selection.kind === "episode" ? (
+            <PlaybackPanel
+              contentId={selection.id}
+              kind={selection.kind}
+              onScanned={(entry) => setPackages((current) => [...current.filter((item) => item.movie_id !== selection.id && item.episode_id !== selection.id), entry])}
+              playbackPackage={playbackPackage}
+              sources={sources}
+            />
+          ) : null}
+        </div>
+      ) : (
+        <div className="empty-state"><span aria-hidden="true" className="empty-orb" /><h2 className="title-m">Crea o elige un título</h2><p>Empieza por una película o una serie en la columna izquierda, o importa un inventario completo.</p></div>
+      )}
+    </div>
+  );
+
+  return (
+    <AdminTabs
+      tabs={[
+        { content: catalog, icon: "grid", id: "catalogo", label: "Catálogo" },
+        {
+          content: (
+            <div className="ops-grid">
+              <MediaInventoryImport onFinished={loadPlaybackConfiguration} sources={sources} />
+              <PublishReadyMedia sources={sources} />
+            </div>
+          ),
+          icon: "upload",
+          id: "carga",
+          label: "Carga masiva y publicación",
+        },
+        { content: <SourcesPanel onCreated={(source) => setSources((current) => [...current, source])} onSynced={loadPlaybackConfiguration} sources={sources} />, icon: "layers", id: "fuentes", label: "Fuentes de Drive" },
+      ]}
+    />
+  );
+}
+
+function GeneralForm({ isParentDraft, kind, onSaved, record }: { isParentDraft: boolean; kind: MediaKind; onSaved: (item: AdminMediaRecord) => void; record: AdminMediaRecord }) {
+  const initial = { adminCode: record.admin_code ?? "", status: record.status, title: record.admin_title };
+  const [original, setOriginal] = useState(initial);
+  const [form, setForm] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const dirty = JSON.stringify(form) !== JSON.stringify(original);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const { item } = await postJson<{ item?: AdminMediaRecord }>("/api/admin/media", { action: "update", adminCode: form.adminCode, contentId: record.id, kind, status: form.status, title: form.title });
+      if (!item) throw new Error("No se pudo guardar el contenido.");
+      onSaved(item);
+      const next = { adminCode: item.admin_code ?? "", status: item.status, title: item.admin_title };
+      setOriginal(next);
+      setForm(next);
+      toast("Cambios guardados.", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo guardar el contenido.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="panel panel-pad" onSubmit={save}>
+      <div className="panel-head">
+        <div><p className="kicker">{kindLabel[kind]}</p><h2 className="title-m">{form.title || record.internal_code}</h2></div>
+        <span className="code-pill">{record.internal_code}</span>
       </div>
+      {isParentDraft ? <div className="notice notice-warn" style={{ marginBottom: 16 }}><span className="notice-icon"><Icon name="eyeOff" /></span><div>La serie padre está en borrador: esto no será visible para lectores aunque lo publiques.</div></div> : null}
+      <div className="form-grid">
+        <label className="field"><span className="field-label">Título administrativo</span><input className="input" onChange={(event) => setForm({ ...form, title: event.target.value })} required value={form.title} /></label>
+        <label className="field"><span className="field-label">Código legible (opcional)</span><input className="input" onChange={(event) => setForm({ ...form, adminCode: event.target.value })} placeholder="HPPF-00001" value={form.adminCode} /></label>
+        <div className="field span-2">
+          <span className="field-label">Estado</span>
+          <div aria-label="Estado de publicación" className="segmented" role="group" style={{ width: "fit-content" }}>
+            <SegmentedThumb index={form.status === "draft" ? 0 : 1} />
+            <button aria-pressed={form.status === "draft"} onClick={() => setForm({ ...form, status: "draft" })} type="button">Borrador</button>
+            <button aria-pressed={form.status === "published"} onClick={() => setForm({ ...form, status: "published" })} type="button">Publicado</button>
+          </div>
+        </div>
+      </div>
+      {dirty ? (
+        <div className="save-bar" role="status">
+          <span>Cambios sin guardar</span>
+          <div>
+            <button className="btn btn-ghost btn-sm" disabled={saving} onClick={() => setForm(original)} type="button">Descartar</button>
+            <button className="btn btn-primary btn-sm" disabled={saving} type="submit"><Icon name="check" />{saving ? "Guardando…" : "Guardar"}</button>
+          </div>
+        </div>
+      ) : null}
+    </form>
+  );
+}
+
+function TmdbPanel({ kind, metadata, onChanged, selectionId }: { kind: MediaKind; metadata: TmdbMetadata | null; onChanged: () => Promise<void>; selectionId: string }) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<TmdbSearchResult[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const canSearch = kind === "movie" || kind === "series";
+
+  async function runSearch(event: FormEvent) {
+    event.preventDefault();
+    if (!search.trim()) return;
+    setBusy("search");
+    try {
+      const { results: found } = await postJson<{ results?: TmdbSearchResult[] }>("/api/admin/tmdb", { action: "search", contentKind: kind, query: search.trim() });
+      setResults(found ?? []);
+      if (!found?.length) toast("TMDB no devolvió resultados para esa búsqueda.", "info");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo buscar en TMDB.", "error");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function act(action: "link" | "refresh" | "unlink", tmdbId?: number) {
+    if (action === "unlink" && !(await confirmDialog({ body: "Se elimina la asociación y la caché de TMDB. El contenido interno no se toca.", confirmLabel: "Desvincular", danger: true, title: "¿Desvincular TMDB?" }))) return;
+    setBusy(action);
+    try {
+      await postJson("/api/admin/tmdb", { action, contentId: selectionId, contentKind: kind, tmdbId });
+      setResults(null);
+      setSearch("");
+      await onChanged();
+      toast(action === "unlink" ? "TMDB desvinculado." : action === "link" ? "Metadatos vinculados." : "Caché de TMDB actualizada.", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo actualizar TMDB.", "error");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <section className="panel panel-pad">
+      <div className="panel-head">
+        <div><p className="kicker">Metadatos</p><h2 className="title-m">TMDB</h2><p>Pósters, sinopsis y géneros se guardan en tu base de datos; los lectores nunca consultan TMDB.</p></div>
+        {metadata?.tmdb_url ? <a className="btn btn-ghost btn-sm" href={metadata.tmdb_url} rel="noreferrer" target="_blank">Ver en TMDB</a> : null}
+      </div>
+      {metadata ? (
+        <div className="tmdb-card">
+          {/* eslint-disable-next-line @next/next/no-img-element -- CDN de TMDB. */}
+          {metadata.poster_path ? <img alt="" src={tmdbImage(metadata.poster_path, "w185")!} /> : <div className="poster-fallback" style={{ width: 110, aspectRatio: "2 / 3", borderRadius: 12 }}>{metadata.localized_title}</div>}
+          <div>
+            <strong className="title-s">{metadata.localized_title ?? metadata.original_title}</strong>
+            <p>{metadata.overview || "Sin sinopsis disponible."}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {metadata.release_date ? <span className="badge">{metadata.release_date.slice(0, 4)}</span> : null}
+              {metadata.runtime_minutes !== null ? <span className="badge">{metadata.runtime_minutes} min</span> : null}
+              {metadata.genres.slice(0, 3).map((genre) => <span className="badge" key={genre.id}>{genre.name}</span>)}
+            </div>
+            <p className="subtle" style={{ fontSize: "0.75rem" }}>Caché: {metadata.synced_at ? new Date(metadata.synced_at).toLocaleString() : "sin fecha"}</p>
+          </div>
+        </div>
+      ) : <p className="muted" style={{ margin: 0 }}>Todavía no hay datos de TMDB para este título.</p>}
+
+      {canSearch ? (
+        <form className="inline-form" onSubmit={(event) => void runSearch(event)} style={{ marginTop: 16 }}>
+          <input className="input" onChange={(event) => setSearch(event.target.value)} placeholder={`Buscar ${kind === "movie" ? "película" : "serie"} en TMDB`} value={search} />
+          <button className="btn btn-ghost" disabled={Boolean(busy)} type="submit"><Icon name="search" />{busy === "search" ? "Buscando…" : "Buscar"}</button>
+        </form>
+      ) : null}
+      {results?.length ? (
+        <div className="tmdb-results">
+          {results.map((result) => (
+            <button className="tmdb-result" disabled={Boolean(busy)} key={result.id} onClick={() => void act("link", result.id)} title="Vincular este resultado" type="button">
+              <MediaPoster posterPath={result.posterPath} sizes="150px" title={result.title ?? result.originalTitle ?? "Sin título"} />
+              <strong>{result.title ?? result.originalTitle ?? "Sin título"}</strong>
+              <span>{result.releaseDate?.slice(0, 4) ?? "—"}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16 }}>
+        {(kind === "season" || kind === "episode") && !metadata ? <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => void act("link")} type="button"><Icon name="wand" />Vincular desde la serie</button> : null}
+        {metadata ? <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => void act("refresh")} type="button"><Icon name="refresh" />{busy === "refresh" ? "Actualizando…" : "Refrescar"}</button> : null}
+        {metadata ? <button className="btn btn-danger btn-sm" disabled={Boolean(busy)} onClick={() => void act("unlink")} type="button"><Icon name="trash" />Desvincular</button> : null}
+      </div>
+      <p className="field-hint" style={{ marginTop: 14 }}>Datos e imágenes proporcionados por TMDB. Esta aplicación no está respaldada ni certificada por TMDB.</p>
     </section>
+  );
+}
+
+function PlaybackPanel({ contentId, kind, onScanned, playbackPackage, sources }: { contentId: string; kind: "episode" | "movie"; onScanned: (entry: PlaybackPackage) => void; playbackPackage?: PlaybackPackage; sources: PlaybackSource[] }) {
+  const [busy, setBusy] = useState(false);
+  const active = sources.filter((source) => source.is_active);
+
+  async function scan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const result = await postJson<{ packageId?: string; scannedAssets?: number; status?: PlaybackPackage["status"] }>("/api/drive-token/media-playback", { action: "scan", contentId, contentKind: kind, driveRootFolderId: form.get("driveRootFolderId"), sourceId: form.get("sourceId") });
+      if (!result.packageId || !result.status) throw new Error("No se pudo escanear el paquete HLS.");
+      onScanned({ drive_root_folder_id: String(form.get("driveRootFolderId")), episode_id: kind === "episode" ? contentId : null, id: result.packageId, last_error: null, movie_id: kind === "movie" ? contentId : null, source_id: String(form.get("sourceId")), status: result.status });
+      toast(`Paquete HLS registrado: ${result.scannedAssets ?? 0} archivos.`, "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo escanear el paquete HLS.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel panel-pad">
+      <div className="panel-head">
+        <div><p className="kicker">Reproducción</p><h2 className="title-m">Paquete HLS en Drive</h2><p>Carpeta con <code>master.m3u8</code>, listas de vídeo/audio y subtítulos. El escaneo registra los archivos sin exponer enlaces.</p></div>
+        {playbackPackage ? <span className={packageBadge[playbackPackage.status]}>{packageLabel[playbackPackage.status]}</span> : <span className="badge">Sin paquete</span>}
+      </div>
+      {playbackPackage?.last_error ? <div className="notice notice-error" style={{ marginBottom: 14 }}><span className="notice-icon"><Icon name="warning" /></span><div>{playbackPackage.last_error}</div></div> : null}
+      {active.length ? (
+        <form className="form-grid" onSubmit={(event) => void scan(event)}>
+          <label className="field"><span className="field-label">Fuente</span><select className="select" defaultValue={playbackPackage?.source_id ?? active[0]?.id} name="sourceId" required>{active.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select></label>
+          <label className="field"><span className="field-label">ID de carpeta del paquete</span><input className="input mono" defaultValue={playbackPackage?.drive_root_folder_id ?? ""} name="driveRootFolderId" placeholder="1AbC…" required /></label>
+          <div className="span-2"><button className="btn btn-primary" disabled={busy} type="submit"><Icon name="refresh" />{busy ? "Escaneando…" : playbackPackage ? "Reescanear" : "Vincular y escanear"}</button></div>
+        </form>
+      ) : <div className="notice notice-warn"><span className="notice-icon"><Icon name="info" /></span><div>Primero crea una fuente de Drive en la pestaña <strong>Fuentes de Drive</strong>.</div></div>}
+    </section>
+  );
+}
+
+function SourcesPanel({ onCreated, onSynced, sources }: { onCreated: (source: PlaybackSource) => void; onSynced: () => Promise<void>; sources: PlaybackSource[] }) {
+  const [busy, setBusy] = useState("");
+  const [progress, setProgress] = useState<{ assets: number; packages: number } | null>(null);
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setBusy("create");
+    try {
+      const { source } = await postJson<{ source?: PlaybackSource }>("/api/drive-token/media-playback", { action: "create-source", driveRootFolderId: form.get("driveRootFolderId"), name: form.get("name") });
+      if (!source) throw new Error("No se pudo guardar la fuente.");
+      onCreated(source);
+      formElement.reset();
+      toast("Fuente de Drive guardada.", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo guardar la fuente.", "error");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function syncPending(sourceId: string) {
+    setBusy(`sync:${sourceId}`);
+    setProgress({ assets: 0, packages: 0 });
+    let packages = 0; let assets = 0; let remaining = 0; let failures = 0; let missing = 0; let duplicates = 0;
+    try {
+      do {
+        const result = await postJson<{ duplicateCodes?: string[]; errors?: unknown[]; missingContentCodes?: string[]; remaining?: number; scanned?: Array<{ assets: number }> }>("/api/admin/media-playback/batch", { sourceId });
+        const scanned = result.scanned ?? [];
+        packages += scanned.length;
+        assets += scanned.reduce((total, item) => total + item.assets, 0);
+        failures += result.errors?.length ?? 0;
+        missing = result.missingContentCodes?.length ?? 0;
+        duplicates = result.duplicateCodes?.length ?? 0;
+        remaining = result.remaining ?? 0;
+        setProgress({ assets, packages });
+        if (!scanned.length) break;
+      } while (remaining > 0);
+      await onSynced();
+      const notes = [failures ? `${failures} con error` : "", missing ? `${missing} sin contenido registrado` : "", duplicates ? `${duplicates} códigos duplicados` : ""].filter(Boolean);
+      toast(`Sincronizados ${packages} paquetes y ${assets} archivos.${notes.length ? ` Revisión: ${notes.join(", ")}.` : ""}`, notes.length ? "warn" : "success", 8000);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudieron sincronizar los paquetes.", "error");
+    } finally {
+      setBusy("");
+      setProgress(null);
+    }
+  }
+
+  return (
+    <div className="ops-grid">
+      <section className="panel panel-pad">
+        <div className="panel-head"><div><p className="kicker">Fuentes</p><h2 className="title-m">Carpetas raíz de Drive</h2><p>Cada fuente apunta a la carpeta que contiene los paquetes <span className="mono">MOV-…</span> y <span className="mono">SER-…</span>.</p></div></div>
+        <div style={{ display: "grid", gap: 10 }}>
+          {sources.map((source) => (
+            <div className="progress-block" key={source.id}>
+              <div className="progress-meta">
+                <strong style={{ color: "var(--ink)" }}>{source.name}</strong>
+                <span className={source.is_active ? "badge badge-mint badge-dot" : "badge"}>{source.is_active ? "Activa" : "Inactiva"}</span>
+              </div>
+              <span className="mono subtle" style={{ fontSize: "0.74rem", overflowWrap: "anywhere" }}>{source.drive_root_folder_id}</span>
+              <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => void syncPending(source.id)} style={{ width: "fit-content" }} type="button"><Icon name="refresh" />{busy === `sync:${source.id}` ? "Sincronizando…" : "Sincronizar paquetes pendientes"}</button>
+              {busy === `sync:${source.id}` && progress ? <span className="field-hint">{progress.packages} paquetes · {progress.assets} archivos registrados…</span> : null}
+            </div>
+          ))}
+          {!sources.length ? <p className="muted" style={{ margin: 0 }}>Aún no hay fuentes configuradas.</p> : null}
+        </div>
+      </section>
+      <section className="panel panel-pad">
+        <div className="panel-head"><div><p className="kicker">Nueva fuente</p><h2 className="title-m">Añadir carpeta de Drive</h2></div></div>
+        <form onSubmit={(event) => void create(event)} style={{ display: "grid", gap: 14 }}>
+          <label className="field"><span className="field-label">Nombre</span><input className="input" name="name" placeholder="Biblioteca de entretenimiento" required /></label>
+          <label className="field"><span className="field-label">ID de carpeta raíz</span><input className="input mono" name="driveRootFolderId" placeholder="1AbC…" required /><span className="field-hint">Está en la URL de la carpeta: drive.google.com/drive/folders/<strong>ID</strong></span></label>
+          <button className="btn btn-primary" disabled={Boolean(busy)} style={{ width: "fit-content" }} type="submit"><Icon name="plus" />{busy === "create" ? "Guardando…" : "Guardar fuente"}</button>
+        </form>
+      </section>
+    </div>
   );
 }

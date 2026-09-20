@@ -89,6 +89,44 @@ export function rewriteHlsPlaylistForPackage(playlistBody: string, playlistPath:
   );
 }
 
+export type HlsDirectAsset = { asset_kind: string; drive_file_id: string; relative_path: string };
+export type HlsDeliveryModule = "movies" | "series";
+
+function packageAssetUrl(packageId: string, path: string) {
+  return `/api/drive-token/media-playback/packages/${encodeURIComponent(packageId)}/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/**
+ * Entrega directa: las listas siguen pasando por el servidor (son pequeñas y
+ * aplican permisos), pero cada segmento apunta a /drive-hls/{id}, que el
+ * service worker descarga de Google sin el salto por Vercel. p/pkg permiten al
+ * worker volver al proxy del servidor si la lectura directa falla.
+ */
+export function rewriteHlsPlaylistForDirect(
+  playlistBody: string,
+  playlistPath: string,
+  assets: HlsDirectAsset[],
+  packageId: string,
+  module: HlsDeliveryModule,
+) {
+  const byPath = new Map(assets.map((asset) => [asset.relative_path, asset]));
+  return rewritePlaylist(
+    playlistBody,
+    playlistPath,
+    new Map(assets.map((asset) => [asset.relative_path, asset.relative_path])),
+    (path) => {
+      const asset = byPath.get(path);
+      const lower = path.toLowerCase();
+      if (lower.endsWith(".m3u8")) return `${packageAssetUrl(packageId, path)}?delivery=direct&m=${module}`;
+      if (!asset || asset.asset_kind === "subtitle" || lower.endsWith(".vtt") || isPlaylistAsset(asset.asset_kind)) return packageAssetUrl(packageId, path);
+      const query = new URLSearchParams({ m: module, p: path, pkg: packageId });
+      return `/drive-hls/${encodeURIComponent(asset.drive_file_id)}?${query}`;
+    },
+    true,
+    true,
+  );
+}
+
 export function isPlaylistAsset(kind: string) {
   return kind === "master_playlist" || kind === "media_playlist";
 }

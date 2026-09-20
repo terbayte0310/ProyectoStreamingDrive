@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { DRIVE_WORKER_REVISION as workerRevision } from "@/lib/media/drive-worker";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Candidate = { driveItemId: string; title: string };
 type EventLog = { label: string; value: string };
-const workerRevision = "refresh-token-v1";
 
 function sendToken(worker: ServiceWorker, token: string) {
   return new Promise<void>((resolve, reject) => {

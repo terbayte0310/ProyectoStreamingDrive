@@ -1,8 +1,22 @@
+// Service worker de Nébula: autoriza las lecturas de Google Drive sin exponer
+// el token a la página y mantiene el fusible de transferencia.
+//
+// Rutas interceptadas:
+//   /drive-stream/{fileId}      lecciones de cursos (MP4 con rangos)
+//   /drive-download/{fileId}    enlace de descarga de recursos
+//   /drive-hls/{fileId}?pkg&p   segmentos HLS directos a Google (sin pasar por Vercel)
+//   /media-stream/{assetId}     compatibilidad con manifiestos antiguos
+
 let driveAccessToken = null;
 let refreshPromise = null;
 let driveSessionVersion = 0;
 let driveAccessInvalidated = false;
 let driveModule = "courses";
+// Tras una reserva aprobada, las siguientes lecturas reservan en paralelo a la
+// descarga durante este intervalo: el fusible sigue contando cada byte, pero la
+// latencia de la reserva deja de sumarse al primer byte de vídeo.
+let budgetWarmUntil = 0;
+const budgetWarmMs = 90_000;
 const announcedTransferNotices = new Set();
 const maxTransferRetries = 2;
 
@@ -26,8 +40,12 @@ self.addEventListener("message", (event) => {
     driveAccessToken = null;
     driveAccessInvalidated = true;
     refreshPromise = null;
+    budgetWarmUntil = 0;
     announcedTransferNotices.clear();
     event.ports[0]?.postMessage({ cleared: true });
+  }
+  if (event.data?.type === "claim-clients") {
+    event.waitUntil?.(self.clients.claim());
   }
 });
 
@@ -198,8 +216,83 @@ async function fetchFromDrive(url, requestHeaders) {
   }
 }
 
+/** Reserva + descarga. Secuencial en frío, en paralelo cuando hay una reserva reciente aprobada. */
+async function budgetedDriveFetch(event, fileId, kind, range, driveRequest) {
+  const optimistic = Date.now() < budgetWarmUntil;
+  const reservationPromise = reserveTransfer(fileId, kind, range);
+  let drivePromise = null;
+  if (optimistic) drivePromise = driveRequest().then((response) => ({ response }), (error) => ({ error }));
+
+  const reservation = await reservationPromise;
+  if (reservation.error) {
+    budgetWarmUntil = 0;
+    if (drivePromise) void drivePromise.then((result) => result.response?.body?.cancel()).catch(() => undefined);
+    return reservation.error;
+  }
+  budgetWarmUntil = Date.now() + budgetWarmMs;
+  if (!drivePromise) drivePromise = driveRequest().then((response) => ({ response }), (error) => ({ error }));
+
+  const result = await drivePromise;
+  if (result.error || !result.response) {
+    await settleTransfer("release", reservation.reservationId);
+    void announceTransferNotice("drive-unavailable");
+    return new Response("Google Drive está temporalmente indisponible.", { status: 503 });
+  }
+  const response = result.response;
+  if (!response.ok) {
+    await settleTransfer("release", reservation.reservationId);
+    if (response.status === 429 || response.status >= 500) void announceTransferNotice("drive-unavailable");
+    return response;
+  }
+  event.waitUntil(settleTransfer("confirm", reservation.reservationId));
+  return response;
+}
+
+function proxyFallback(url) {
+  const packageId = url.searchParams.get("pkg");
+  const relativePath = url.searchParams.get("p");
+  if (!packageId || !relativePath) return null;
+  const encodedPath = relativePath.split("/").map(encodeURIComponent).join("/");
+  return `/api/drive-token/media-playback/packages/${encodeURIComponent(packageId)}/${encodedPath}`;
+}
+
+async function handleDirectHls(event, url) {
+  const fileId = decodeURIComponent(url.pathname.slice("/drive-hls/".length));
+  const fallback = proxyFallback(url);
+  if (url.searchParams.get("m") === "movies" || url.searchParams.get("m") === "series") driveModule = url.searchParams.get("m");
+  if (!fileId) return new Response("Archivo no válido.", { status: 404 });
+  if (!driveAccessToken && !(await refreshAccessToken())) {
+    return fallback ? fetch(fallback, { credentials: "same-origin" }) : new Response("Drive authorization is missing.", { status: 401 });
+  }
+  const headers = new Headers();
+  const range = event.request.headers.get("Range");
+  if (range) headers.set("Range", range);
+  const response = await budgetedDriveFetch(
+    event,
+    fileId,
+    "stream",
+    range,
+    () => fetchFromDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, headers),
+  );
+  // Si Google rechaza la lectura directa, el servidor lo intenta con su propio canal.
+  if (fallback && (response.status === 403 || response.status >= 500) && response.status !== 429) {
+    return fetch(fallback, { credentials: "same-origin" });
+  }
+  if (!response.ok) return response;
+  // Los segmentos son inmutables: se entregan sin cabeceras de Google que
+  // impidan reutilizarlos al retroceder dentro de la misma sesión.
+  const out = new Headers(response.headers);
+  out.set("cache-control", "private, max-age=86400, immutable");
+  return new Response(response.body, { headers: out, status: response.status, statusText: response.statusText });
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  if (url.origin !== self.location?.origin && self.location) return;
+  if (url.pathname.startsWith("/drive-hls/")) {
+    event.respondWith(handleDirectHls(event, url));
+    return;
+  }
   const isStreamRequest = url.pathname.startsWith("/drive-stream/");
   const isDownloadRequest = url.pathname.startsWith("/drive-download/");
   const isMediaStreamRequest = url.pathname.startsWith("/media-stream/");
@@ -235,33 +328,11 @@ self.addEventListener("fetch", (event) => {
       return new Response("Drive authorization is missing.", { status: 401 });
     }
     const headers = new Headers(event.request.headers);
-    const reservation = await reserveTransfer(
-      fileId,
-      isDownloadRequest ? "download" : "stream",
-      headers.get("Range"),
-    );
-    if (reservation.error) return reservation.error;
-
-    let response;
-    try {
-      if (isDownloadRequest) {
-        headers.set("Accept", "application/json");
-        response = await fetchFromDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=webContentLink`, headers);
-      } else {
-        response = await fetchFromDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, headers);
-      }
-    } catch {
-      await settleTransfer("release", reservation.reservationId);
-      void announceTransferNotice("drive-unavailable");
-      return new Response("Google Drive está temporalmente indisponible.", { status: 503 });
-    }
-
-    if (!response.ok) {
-      await settleTransfer("release", reservation.reservationId);
-      if (response.status === 429 || response.status >= 500) void announceTransferNotice("drive-unavailable");
-      return response;
-    }
-    event.waitUntil(settleTransfer("confirm", reservation.reservationId));
-    return response;
+    const range = headers.get("Range");
+    if (isDownloadRequest) headers.set("Accept", "application/json");
+    const driveUrl = isDownloadRequest
+      ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=webContentLink`
+      : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    return budgetedDriveFetch(event, fileId, isDownloadRequest ? "download" : "stream", range, () => fetchFromDrive(driveUrl, headers));
   })());
 });

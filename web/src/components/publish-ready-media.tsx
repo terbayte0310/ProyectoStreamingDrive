@@ -1,43 +1,68 @@
 "use client";
 
-import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { Icon } from "@/components/icons";
+import { toast } from "@/components/toaster";
+import { confirmDialog } from "@/components/ui/confirm";
 
 type PlaybackSource = { id: string; is_active: boolean; name: string };
+type Published = { episodes: number; movies: number; seasons: number; series: number };
 
 export function PublishReadyMedia({ sources }: { sources: PlaybackSource[] }) {
   const router = useRouter();
+  const active = sources.filter((source) => source.is_active);
+  const [sourceId, setSourceId] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [last, setLast] = useState<Published | null>(null);
+  const chosen = sourceId || active[0]?.id || "";
 
-  async function publish(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const sourceId = String(new FormData(event.currentTarget).get("sourceId") ?? "");
-    if (!sourceId || !window.confirm("Se publicarán únicamente los paquetes HLS listos. ¿Continuar?")) return;
+  async function publish() {
+    if (!chosen) return;
+    if (!(await confirmDialog({ body: "Solo se publican películas y episodios con paquete HLS validado; lo demás se omite automáticamente.", confirmLabel: "Publicar lo listo", title: "¿Publicar el contenido listo?" }))) return;
     setBusy(true);
-    setMessage("");
     try {
-      const response = await fetch("/api/admin/media-playback/publish", { body: JSON.stringify({ sourceId }), headers: { "Content-Type": "application/json" }, method: "POST" });
-      const result = await response.json().catch(() => ({})) as { error?: string; published?: { episodes: number; movies: number; seasons: number; series: number } };
+      const response = await fetch("/api/admin/media-playback/publish", { body: JSON.stringify({ sourceId: chosen }), headers: { "Content-Type": "application/json" }, method: "POST" });
+      const result = await response.json().catch(() => ({})) as { error?: string; published?: Published };
       if (!response.ok || !result.published) throw new Error(result.error ?? "No se pudo publicar el contenido listo.");
-      const item = result.published;
-      setMessage(`Publicado: ${item.movies} películas, ${item.series} series, ${item.seasons} temporadas y ${item.episodes} episodios con HLS listo.`);
+      setLast(result.published);
+      toast("Publicación completada.", "success");
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo publicar el contenido listo.");
+      toast(error instanceof Error ? error.message : "No se pudo publicar el contenido listo.", "error");
     } finally {
       setBusy(false);
     }
   }
 
-  return <section className="admin-panel p-6">
-    <p className="eyebrow">Publicación</p>
-    <h2 className="mt-1 text-xl font-semibold">Publicar paquetes listos</h2>
-    <p className="mt-2 text-sm text-slate-500">Hace visible el contenido con paquete HLS validado. Omite automáticamente cualquier película o episodio sin paquete listo.</p>
-    <form className="mt-5 flex flex-wrap gap-3" onSubmit={(event) => void publish(event)}>
-      <select className="admin-input min-w-64 rounded-lg border px-3 py-2 text-sm" defaultValue="" disabled={busy} name="sourceId" required><option disabled value="">Fuente de Drive</option>{sources.filter((source) => source.is_active).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select>
-      <button className="primary-button text-sm disabled:opacity-50" disabled={busy || !sources.some((source) => source.is_active)} type="submit">{busy ? "Publicando…" : "Publicar todo lo listo"}</button>
-    </form>
-    {message ? <p className={message.startsWith("Publicado:") ? "mt-4 text-sm text-emerald-700" : "mt-4 text-sm text-rose-600"}>{message}</p> : null}
-  </section>;
+  return (
+    <section className="panel panel-pad">
+      <div className="panel-head">
+        <div><p className="kicker">Publicación</p><h2 className="title-m">Publicar paquetes listos</h2><p>Hace visible lo que ya tiene HLS validado, en un solo paso.</p></div>
+      </div>
+      <ol className="op-steps" style={{ marginBottom: 18 }}>
+        <li>Importa el inventario o sincroniza Drive.</li>
+        <li>Revisa que los paquetes figuren como <span className="badge badge-mint">Listo</span>.</li>
+        <li>Publica: los lectores lo verán al instante.</li>
+      </ol>
+      <div style={{ display: "grid", gap: 12 }}>
+        <label className="field">
+          <span className="field-label">Fuente de Drive</span>
+          <select className="select" disabled={busy || !active.length} onChange={(event) => setSourceId(event.target.value)} value={chosen}>
+            {active.length ? active.map((source) => <option key={source.id} value={source.id}>{source.name}</option>) : <option value="">Crea primero una fuente</option>}
+          </select>
+        </label>
+        <button className="btn btn-primary" disabled={busy || !chosen} onClick={() => void publish()} style={{ width: "fit-content" }} type="button"><Icon name="sparkle" />{busy ? "Publicando…" : "Publicar todo lo listo"}</button>
+        {last ? (
+          <div className="counter-grid">
+            <div className="counter"><span>Películas</span><strong>{last.movies}</strong></div>
+            <div className="counter"><span>Series</span><strong>{last.series}</strong></div>
+            <div className="counter"><span>Temporadas</span><strong>{last.seasons}</strong></div>
+            <div className="counter"><span>Episodios</span><strong>{last.episodes}</strong></div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
 }

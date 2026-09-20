@@ -1,132 +1,95 @@
-"use client";
+import type { Metadata } from "next";
+import type { CSSProperties } from "react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { useEffect, useState } from "react";
+import { Icon, type IconName } from "@/components/icons";
+import { libraryModuleLinks, type LibraryModule } from "@/components/media-catalog";
+import { SignOutButton } from "@/components/sign-out-button";
+import { SiteHeader } from "@/components/site-header";
+import { getViewer } from "@/lib/auth/access";
 
-import { AppHeader } from "@/components/app-header";
-import { completeSignOut } from "@/lib/auth/sign-out-client";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Mi espacio" };
 
-type AccessProfile = {
-  email: string;
-  is_authorized: boolean;
-  role: "admin" | "reader";
-};
+const moduleIcons: Record<LibraryModule, IconName> = { courses: "course", movies: "film", series: "tv" };
 
-type ViewState =
-  | { kind: "loading" }
-  | { kind: "signed-out" }
-  | { kind: "denied"; email: string }
-  | { kind: "authorized"; profile: AccessProfile }
-  | { kind: "error"; message: string };
-
-export default function DashboardPage() {
-  const [view, setView] = useState<ViewState>({ kind: "loading" });
-  const [isSigningOut, setIsSigningOut] = useState(false);
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-
-    async function loadAccess() {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      const user = userData.user;
-
-      if (userError && userError.name !== "AuthSessionMissingError") {
-        setView({ kind: "error", message: userError.message });
-        return;
-      }
-
-      if (!user) {
-        setView({ kind: "signed-out" });
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("email, role, is_authorized")
-        .eq("id", user.id)
-        .single<AccessProfile>();
-
-      if (profileError || !profile) {
-        setView({
-          kind: "error",
-          message: profileError?.message ?? "No se encontró un perfil para esta cuenta.",
-        });
-        return;
-      }
-
-      if (!profile.is_authorized) {
-        setView({ kind: "denied", email: profile.email });
-        return;
-      }
-
-      setView({ kind: "authorized", profile });
-    }
-
-    void loadAccess();
-  }, []);
-
-  async function signOut() {
-    setIsSigningOut(true);
-    await completeSignOut();
-  }
+// Antes era una página cliente que consultaba la sesión y el perfil desde el
+// navegador; ahora llega ya resuelta en el HTML inicial.
+export default async function DashboardPage() {
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+  const profile = viewer.profile;
+  const authorized = Boolean(profile?.is_authorized);
+  const isAdmin = authorized && profile?.role === "admin";
+  const initial = (profile?.email?.[0] ?? "N").toUpperCase();
 
   return (
-    <div className="app-shell">
-      <AppHeader admin={view.kind === "authorized" && view.profile.role === "admin"} email={view.kind === "authorized" ? view.profile.email : undefined} />
-      <main className="account-page page-width">
-      <section className="account-panel">
-        <p className="eyebrow">Mi cuenta</p>
-
-        {view.kind === "loading" ? <p className="muted">Comprobando autorización…</p> : null}
-
-        {view.kind === "signed-out" ? (
-          <>
-            <h1 className="text-3xl font-semibold">Necesitas iniciar sesión.</h1>
-            <a className="primary-button w-fit" href="/signin">
-              Ir al acceso
-            </a>
-          </>
-        ) : null}
-
-        {view.kind === "denied" ? (
-          <>
-            <h1 className="text-3xl font-semibold">Acceso no autorizado</h1>
-            <p className="muted">
-              La cuenta {view.email} inició sesión correctamente, pero todavía no está en la lista de acceso.
-            </p>
-            <button className="secondary-button w-fit" disabled={isSigningOut} onClick={() => void signOut()} type="button">
-              {isSigningOut ? "Cerrando sesión…" : "Cerrar sesión"}
-            </button>
-          </>
-        ) : null}
-
-        {view.kind === "authorized" ? (
-          <>
-            <div className="account-authorized">
-              <p className="font-semibold text-blue-500">Acceso autorizado</p>
-              <p className="mt-1">{view.profile.email}</p>
-              <p className="mt-3 text-sm muted">
-                Rol actual: {view.profile.role === "admin" ? "administrador" : "lector"}.
-              </p>
+    <div className="shell">
+      <SiteHeader />
+      <main className="shell-main container">
+        <section className="account-hero rise">
+          <span aria-hidden="true" className="account-avatar">{initial}</span>
+          <div style={{ display: "grid", gap: "0.5rem", minWidth: 0 }}>
+            <p className="kicker">Mi espacio</p>
+            <h1 className="title-l">{profile?.email ?? "Tu cuenta"}</h1>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {authorized ? <span className="badge badge-mint badge-dot">Acceso autorizado</span> : <span className="badge badge-gold badge-dot">Pendiente de aprobación</span>}
+              {authorized ? <span className="badge badge-iris">{isAdmin ? "Administrador" : "Lector"}</span> : null}
             </div>
-            <p className="muted">Tu biblioteca está lista para usar.</p>
-            <div className="flex flex-wrap gap-3">
-              <a className="primary-button w-fit" href="/catalog">Abrir catálogo</a>
-              {view.profile.role === "admin" ? <a className="secondary-button w-fit" href="/admin">Administrar catálogo</a> : null}
-            </div>
-            <button className="secondary-button w-fit" disabled={isSigningOut} onClick={() => void signOut()} type="button">
-              {isSigningOut ? "Cerrando sesión…" : "Cerrar sesión"}
-            </button>
-          </>
-        ) : null}
-
-        {view.kind === "error" ? (
-          <div className="auth-message p-6">
-            <h1 className="font-semibold">No se pudo comprobar el acceso</h1>
-            <p className="mt-2">{view.message}</p>
           </div>
-        ) : null}
-      </section>
+          <SignOutButton />
+        </section>
+
+        {!authorized ? (
+          <section className="section">
+            <div className="notice notice-warn">
+              <span className="notice-icon"><Icon name="lock" /></span>
+              <div><strong>Tu cuenta inició sesión, pero aún no está en la lista de acceso.</strong> Pide a un administrador que la apruebe; después vuelve a entrar.</div>
+            </div>
+          </section>
+        ) : (
+          <>
+            <section className="section">
+              <div className="section-head"><div><p className="kicker">Tus módulos</p><h2 className="title-l">¿Qué te apetece hoy?</h2></div></div>
+              <div className="module-grid">
+                {libraryModuleLinks.map((item, index) => {
+                  const enabled = viewer.modules.includes(item.module);
+                  const content = (
+                    <>
+                      <span className="module-card-icon"><Icon name={moduleIcons[item.module]} /></span>
+                      <div>
+                        <h3 className="title-m">{item.label}</h3>
+                        <p>{enabled ? item.description : "No está asignado a tu cuenta."}</p>
+                      </div>
+                      {enabled ? <span className="link-arrow">Abrir <span aria-hidden="true">→</span></span> : <span className="subtle">Sin acceso</span>}
+                    </>
+                  );
+                  return enabled
+                    ? <Link className="module-card rise" data-spotlight="" data-tilt="4" href={item.href} key={item.module} style={{ "--i": index } as CSSProperties}>{content}</Link>
+                    : <div aria-disabled="true" className="module-card rise" key={item.module} style={{ "--i": index } as CSSProperties}>{content}</div>;
+                })}
+              </div>
+            </section>
+            {isAdmin ? (
+              <section className="section">
+                <div className="section-head"><div><p className="kicker">Administración</p><h2 className="title-l">Gestiona la biblioteca</h2></div></div>
+                <div className="module-grid">
+                  <Link className="module-card" data-spotlight="" data-tilt="4" href="/admin">
+                    <span className="module-card-icon"><Icon name="layers" /></span>
+                    <div><h3 className="title-m">Cursos</h3><p>Sincroniza Drive, edita metadatos, orden y visibilidad.</p></div>
+                    <span className="link-arrow">Administrar <span aria-hidden="true">→</span></span>
+                  </Link>
+                  <Link className="module-card" data-spotlight="" data-tilt="4" href="/admin/media">
+                    <span className="module-card-icon"><Icon name="film" /></span>
+                    <div><h3 className="title-m">Películas y Series</h3><p>Importa inventarios, vincula TMDB y publica paquetes HLS.</p></div>
+                    <span className="link-arrow">Administrar <span aria-hidden="true">→</span></span>
+                  </Link>
+                </div>
+              </section>
+            ) : null}
+          </>
+        )}
       </main>
     </div>
   );

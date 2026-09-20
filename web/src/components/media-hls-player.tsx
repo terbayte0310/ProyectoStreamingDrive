@@ -1,120 +1,264 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
-import { CinemaPlayer } from "@/components/cinema-player";
+import type { HlsConfig } from "hls.js";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { NebulaPlayer, type PlayerStatus, type TrackOption } from "@/components/nebula-player";
 import { completeSignOut } from "@/lib/auth/sign-out-client";
+import { getDriveWorker, sendDriveToken, workerControlsPage } from "@/lib/media/drive-worker";
+import { readLocalProgress, resumePoint, writeLocalProgress } from "@/lib/media/local-progress";
 import { shiftSubtitleCues } from "@/lib/media/subtitle-time";
 
-type PlayerState = "error" | "loading" | "needs-drive" | "ready";
+const stageLabels = ["Verificando tu acceso", "Preparando el canal seguro", "Leyendo el índice del vídeo", "Cargando los primeros segundos"];
+
+// Pensado para conexiones lentas o inestables: arranca con una estimación
+// prudente, limita la calidad al tamaño real del reproductor y reintenta los
+// fragmentos antes de rendirse.
+const slowNetworkConfig: Partial<HlsConfig> = {
+  abrEwmaDefaultEstimate: 1_500_000,
+  backBufferLength: 60,
+  capLevelToPlayerSize: true,
+  enableWorker: true,
+  fragLoadPolicy: {
+    default: {
+      errorRetry: { maxNumRetry: 4, maxRetryDelayMs: 8000, retryDelayMs: 800 },
+      maxLoadTimeMs: 90_000,
+      maxTimeToFirstByteMs: 20_000,
+      timeoutRetry: { maxNumRetry: 3, maxRetryDelayMs: 0, retryDelayMs: 0 },
+    },
+  },
+  maxBufferLength: 30,
+  maxBufferSize: 60 * 1000 * 1000,
+  maxMaxBufferLength: 120,
+  startFragPrefetch: true,
+  startLevel: -1,
+  testBandwidth: true,
+};
 
 function languageLabel(name: string | undefined, lang: string | undefined, index: number) {
   const value = `${name ?? ""} ${lang ?? ""}`.toLowerCase();
-  if (value.includes("spa") || value.includes("españ") || value.includes("spanish")) return "Español";
-  if (value.includes("eng") || value.includes("ingl") || value.includes("english")) return "English";
+  if (value.includes("spa") || value.includes("españ") || value.includes("spanish") || /\bes\b/.test(value)) return "Español";
+  if (value.includes("eng") || value.includes("ingl") || value.includes("english") || /\ben\b/.test(value)) return "English";
+  if (value.includes("jpn") || value.includes("japan") || /\bja\b/.test(value)) return "日本語";
   return name || lang || `Pista ${index + 1}`;
 }
 
-export function MediaHlsPlayer({ module, packageId, title = "Tu próxima historia" }: { module: "movies" | "series"; packageId: string; title?: string }) {
+type Props = {
+  backHref: string;
+  backdrop?: string | null;
+  badges?: string[];
+  module: "movies" | "series";
+  next?: { packageId: string; title: string } | null;
+  packageId: string;
+  subtitle?: string;
+  title?: string;
+};
+
+export function MediaHlsPlayer({ backHref, backdrop, badges, module, next, packageId, subtitle, title = "Tu próxima historia" }: Props) {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const originalCueTimesRef = useRef(new WeakMap<TextTrackCue, { endTime: number; startTime: number }>());
   const subtitleDelayRef = useRef(0);
-  const [state, setState] = useState<PlayerState>("loading");
+  const lastSavedRef = useRef(0);
+  const [status, setStatus] = useState<PlayerStatus>("loading");
+  const [stage, setStage] = useState(0);
   const [error, setError] = useState("");
-  const [audioTracks, setAudioTracks] = useState<Array<{ index: number; label: string }>>([]);
-  const [audioTrack, setAudioTrack] = useState(-1);
-  const [subtitles, setSubtitles] = useState<Array<{ index: number; label: string }>>([]);
-  const [subtitle, setSubtitle] = useState(-1);
-  const [subtitleDelay, setSubtitleDelay] = useState(0);
-  const [qualities, setQualities] = useState<Array<{ index: number; label: string }>>([]);
-  const [quality, setQuality] = useState(-1);
   const [attempt, setAttempt] = useState(0);
+  const [forceProxy, setForceProxy] = useState(false);
+  const [resumeAt, setResumeAt] = useState(0);
+  const [audioTracks, setAudioTracks] = useState<TrackOption[]>([]);
+  const [audioTrack, setAudioTrack] = useState(-1);
+  const [subtitles, setSubtitles] = useState<TrackOption[]>([]);
+  const [subtitle_, setSubtitle] = useState(-1);
+  const [subtitleDelay, setSubtitleDelay] = useState(0);
+  const [qualities, setQualities] = useState<TrackOption[]>([]);
+  const [quality, setQuality] = useState(-1);
+  const [autoLevelLabel, setAutoLevelLabel] = useState("");
+  // Un reintento o el cambio a proxy montan un reproductor nuevo: la reanudación vuelve a aplicarse.
+  const playerKey = `${packageId}:${attempt}:${forceProxy ? "proxy" : "auto"}`;
 
   useEffect(() => {
     let disposed = false;
     let hlsInstance: Hls | null = null;
+    let networkRecoveries = 0;
+    let mediaRecoveries = 0;
+    let directFailures = 0;
+
     async function prepare() {
-      setState("loading");
+      setStatus("loading");
+      setStage(0);
       setError("");
       setAudioTracks([]); setSubtitles([]); setQualities([]); setQuality(-1); setSubtitle(-1);
       originalCueTimesRef.current = new WeakMap();
+      setResumeAt(resumePoint(readLocalProgress(packageId)));
       try {
-        // Refresh once before hls.js starts its parallel playlist/segment loads.
-        // The resulting HttpOnly cookie is then available to every scoped HLS URL.
-        const tokenResponse = await fetch(`/api/drive-token?force=1&module=${module}`, {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
-        if (tokenResponse.status === 401) {
-          if (!disposed) setState("needs-drive");
-          return;
-        }
+        // Token, worker y la librería HLS se preparan en paralelo. El token
+        // también renueva la cookie HttpOnly que usa la ruta de respaldo.
+        const [tokenResponse, worker, HlsModule] = await Promise.all([
+          fetch(`/api/drive-token?force=1&module=${module}`, { cache: "no-store", credentials: "same-origin" }),
+          getDriveWorker().catch(() => null),
+          import("hls.js"),
+        ]);
+        if (disposed) return;
+        if (tokenResponse.status === 401) { setStatus("needs-auth"); return; }
         if (!tokenResponse.ok) {
           const body = await tokenResponse.json().catch(() => null) as { error?: string } | null;
           throw new Error(body?.error || "No se pudo autorizar la reproducción con Google Drive.");
         }
+        const { accessToken } = await tokenResponse.json() as { accessToken?: string };
+        setStage(1);
+        const HlsClass = HlsModule.default;
+        const canUseMse = HlsClass.isSupported();
+        if (worker && accessToken) await sendDriveToken(worker, accessToken, module);
+        // Entrega directa (navegador → Google) solo si el worker controla la
+        // página y hls.js hace las peticiones; si no, respaldo por el servidor.
+        const direct = canUseMse && !forceProxy && Boolean(worker) && workerControlsPage();
         const video = videoRef.current;
-        if (!video) throw new Error("No se pudo preparar el reproductor.");
-        const manifestUrl = `/api/media-hls/packages/${packageId}/manifest?hls-route=drive-cookie-v3`;
-        const Hls = (await import("hls.js")).default;
-        if (disposed) return;
-        if (Hls.isSupported()) {
-          const instance = new Hls({ enableWorker: true });
+        if (!video || disposed) return;
+        const manifestUrl = `/api/media-hls/packages/${packageId}/manifest?hls-route=drive-cookie-v3${direct ? "&delivery=direct" : ""}`;
+        setStage(2);
+
+        if (canUseMse) {
+          const instance = new HlsClass(slowNetworkConfig);
           hlsInstance = instance;
           hlsRef.current = instance;
+          const Events = HlsClass.Events;
           const refreshTracks = () => {
             if (disposed) return;
-            setAudioTracks(instance.audioTracks.map((track, index) => ({ index, label: languageLabel(track.name, track.lang, index) })));
+            setAudioTracks(instance.audioTracks.map((track, index) => ({ label: languageLabel(track.name, track.lang, index), value: index })));
             setAudioTrack(instance.audioTrack);
           };
-          instance.on(Hls.Events.AUDIO_TRACKS_UPDATED, refreshTracks);
-          instance.on(Hls.Events.AUDIO_TRACK_SWITCHED, refreshTracks);
-          instance.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
-            if (!disposed) setSubtitles(instance.subtitleTracks.map((track, index) => ({ index, label: languageLabel(track.name, track.lang, index) })));
+          instance.on(Events.AUDIO_TRACKS_UPDATED, refreshTracks);
+          instance.on(Events.AUDIO_TRACK_SWITCHED, refreshTracks);
+          instance.on(Events.SUBTITLE_TRACKS_UPDATED, () => {
+            if (!disposed) setSubtitles(instance.subtitleTracks.map((track, index) => ({ label: languageLabel(track.name, track.lang, index), value: index })));
           });
-          instance.on(Hls.Events.SUBTITLE_TRACK_SWITCH, () => { if (!disposed) setSubtitle(instance.subtitleTrack); });
-          instance.on(Hls.Events.SUBTITLE_FRAG_PROCESSED, () => {
+          instance.on(Events.SUBTITLE_TRACK_SWITCH, () => { if (!disposed) setSubtitle(instance.subtitleTrack); });
+          instance.on(Events.SUBTITLE_FRAG_PROCESSED, () => {
             window.requestAnimationFrame(() => {
-              if (!disposed && video.textTracks) {
-                shiftSubtitleCues(video.textTracks, subtitleDelayRef.current, originalCueTimesRef.current);
-              }
+              if (!disposed && video.textTracks) shiftSubtitleCues(video.textTracks, subtitleDelayRef.current, originalCueTimesRef.current);
             });
           });
-          instance.on(Hls.Events.MANIFEST_PARSED, () => {
-            if (!disposed) setQualities(instance.levels.map((level, index) => ({ index, label: level.height ? `${level.height}p` : `Variante ${index + 1}` })));
+          instance.on(Events.MANIFEST_PARSED, () => {
+            if (disposed) return;
+            setStage(3);
+            const levels = instance.levels.map((level, index) => ({ height: level.height, index }));
+            setQualities(levels.sort((a, b) => b.height - a.height).map((level) => ({ label: level.height ? `${level.height}p` : `Variante ${level.index + 1}`, value: level.index })));
           });
-          instance.on(Hls.Events.ERROR, (_event, data) => {
+          instance.on(Events.LEVEL_SWITCHED, (_event, data) => {
+            const level = instance.levels[data.level];
+            if (!disposed && level?.height) setAutoLevelLabel(`${level.height}p`);
+          });
+          instance.on(Events.FRAG_BUFFERED, () => { if (!disposed) setStatus((current) => (current === "loading" ? "ready" : current)); });
+          instance.on(Events.ERROR, (_event, data) => {
             if (!data.fatal || disposed) return;
-            const httpStatus = typeof data.response?.code === "number" ? ` · HTTP ${data.response.code}` : "";
-            const failedPath = typeof data.url === "string" ? ` · ${new URL(data.url, window.location.origin).pathname}` : "";
-            setError(`La reproducción se interrumpió (${data.type} · ${data.details}${httpStatus}${failedPath}).`);
-            setState("error");
+            const code = typeof data.response?.code === "number" ? data.response.code : 0;
+            if (code === 401) { setStatus("needs-auth"); return; }
+            if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
+              mediaRecoveries += 1;
+              if (mediaRecoveries === 2) instance.swapAudioCodec();
+              instance.recoverMediaError();
+              return;
+            }
+            if (data.type === HlsClass.ErrorTypes.NETWORK_ERROR) {
+              if (direct && data.details === HlsClass.ErrorDetails.FRAG_LOAD_ERROR && ++directFailures >= 2) {
+                // Si la vía directa falla de forma repetida se cambia al proxy sin perder la posición.
+                setForceProxy(true);
+                return;
+              }
+              if (networkRecoveries < 3) {
+                networkRecoveries += 1;
+                window.setTimeout(() => { if (!disposed) instance.startLoad(); }, 1000 * networkRecoveries);
+                return;
+              }
+            }
+            const httpStatus = code ? ` · HTTP ${code}` : "";
+            setError(`La reproducción se interrumpió (${data.details}${httpStatus}). Revisa tu conexión y vuelve a intentarlo.`);
+            setStatus("error");
           });
           instance.loadSource(manifestUrl);
           instance.attachMedia(video);
         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          // Safari nativo (iPhone antiguo): sus peticiones de vídeo no pasan por el worker.
           video.src = manifestUrl;
+          video.addEventListener("loadedmetadata", () => { if (!disposed) setStatus("ready"); }, { once: true });
         } else {
           throw new Error("Este navegador no admite reproducción HLS.");
         }
-        if (!disposed) setState("ready");
       } catch (caught) {
-        if (!disposed) { setError(caught instanceof Error ? caught.message : "No se pudo preparar el reproductor."); setState("error"); }
+        if (!disposed) { setError(caught instanceof Error ? caught.message : "No se pudo preparar el reproductor."); setStatus("error"); }
       }
     }
     void prepare();
-    return () => { disposed = true; hlsInstance?.destroy(); if (hlsRef.current === hlsInstance) hlsRef.current = null; };
-  }, [module, packageId, attempt]);
+    const mountedVideo = videoRef.current;
+    return () => {
+      disposed = true;
+      const video = mountedVideo;
+      if (video && Number.isFinite(video.duration) && video.currentTime > 5) writeLocalProgress(packageId, video.currentTime, video.duration);
+      hlsInstance?.destroy();
+      if (hlsRef.current === hlsInstance) hlsRef.current = null;
+    };
+  }, [attempt, forceProxy, module, packageId]);
 
-  return <>
-    {state === "loading" ? <div className="status-card" role="status">Preparando tu vídeo…</div> : null}
-    {state === "needs-drive" ? <div className="status-card" role="alert"><p>La autorización de Google Drive venció o no está disponible.</p><button className="secondary-button mt-4" type="button" onClick={() => void completeSignOut()}>Volver a iniciar sesión</button></div> : null}
-    {state === "error" ? <div className="status-card" role="alert"><p>{error}</p><button className="secondary-button mt-4" type="button" onClick={() => setAttempt(value => value + 1)}>Reintentar reproducción</button></div> : null}
-    <div className={state === "ready" ? "video-shell" : "hidden"}><CinemaPlayer title={title} preload="metadata" videoRef={videoRef} settings={<>{audioTracks.length > 1 ? <label>Audio<select onChange={(event) => { const next = Number(event.target.value); if (hlsRef.current) hlsRef.current.audioTrack = next; setAudioTrack(next); }} value={audioTrack}>{audioTracks.map((track) => <option key={track.index} value={track.index}>{track.label}</option>)}</select></label> : <p>Las pistas disponibles dependen del vídeo. En Safari puedes usar los controles del navegador para cambiar el audio.</p>}
-      {subtitles.length ? <label>Subtítulos<select aria-label="Subtítulos" value={subtitle} onChange={event => { const value = Number(event.target.value); if (hlsRef.current) hlsRef.current.subtitleTrack = value; setSubtitle(value); }}><option value={-1}>Desactivados</option>{subtitles.map(track => <option key={track.index} value={track.index}>{track.label}</option>)}</select></label> : null}
-      {subtitles.length ? <label>Sincronización de subtítulos <span>{subtitleDelay > 0 ? `+${subtitleDelay.toFixed(1)} s` : `${subtitleDelay.toFixed(1)} s`}</span><input aria-label="Sincronización de subtítulos" type="range" min={-10} max={10} step={0.5} value={subtitleDelay} onChange={event => { const value = Number(event.target.value); subtitleDelayRef.current = value; setSubtitleDelay(value); const video = videoRef.current; if (video) shiftSubtitleCues(video.textTracks, value, originalCueTimesRef.current); }} /><small>Negativo adelanta · positivo retrasa</small></label> : null}
-      {qualities.length > 1 ? <label>Calidad<select aria-label="Calidad" value={quality} onChange={event => { const value = Number(event.target.value); if (hlsRef.current) hlsRef.current.currentLevel = value; setQuality(value); }}><option value={-1}>Automática</option>{qualities.map(level => <option key={level.index} value={level.index}>{level.label}</option>)}</select></label> : null}
-    </>} /></div>
-  </>;
+  // Si el primer fragmento ya está listo antes que el evento de hls.js (Safari), se marca listo igual.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onReady = () => setStatus((current) => (current === "loading" ? "ready" : current));
+    video.addEventListener("canplay", onReady);
+    return () => video.removeEventListener("canplay", onReady);
+  }, [playerKey]);
+
+  // Progreso local cada 5 s, al pausar y al abandonar la página.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const save = () => { if (Number.isFinite(video.duration) && video.currentTime > 5) writeLocalProgress(packageId, video.currentTime, video.duration); };
+    const onTime = () => {
+      const now = Date.now();
+      if (now - lastSavedRef.current > 5000) { lastSavedRef.current = now; save(); }
+    };
+    video.addEventListener("timeupdate", onTime);
+    video.addEventListener("pause", save);
+    video.addEventListener("ended", save);
+    window.addEventListener("pagehide", save);
+    return () => {
+      video.removeEventListener("timeupdate", onTime);
+      video.removeEventListener("pause", save);
+      video.removeEventListener("ended", save);
+      window.removeEventListener("pagehide", save);
+    };
+  }, [packageId, playerKey]);
+
+  const playNext = useCallback(() => { if (next) router.push(`/media-player?package=${next.packageId}`); }, [next, router]);
+
+  return (
+    <NebulaPlayer
+      audio={{ onChange: (value) => { if (hlsRef.current) hlsRef.current.audioTrack = value; setAudioTrack(value); }, options: audioTracks, value: audioTrack }}
+      autoPlay
+      backHref={backHref}
+      backdrop={backdrop}
+      badges={badges}
+      captionDelay={{ onChange: (value) => { subtitleDelayRef.current = value; setSubtitleDelay(value); const video = videoRef.current; if (video) shiftSubtitleCues(video.textTracks, value, originalCueTimesRef.current); }, value: subtitleDelay }}
+      captions={{ onChange: (value) => { if (hlsRef.current) { hlsRef.current.subtitleTrack = value; hlsRef.current.subtitleDisplay = value >= 0; } setSubtitle(value); }, options: subtitles, value: subtitle_ }}
+      error={error}
+      key={playerKey}
+      nextLabel={next ? `Siguiente: ${next.title}` : undefined}
+      onNext={next ? playNext : undefined}
+      onReauthorize={() => void completeSignOut()}
+      onRetry={() => setAttempt((value) => value + 1)}
+      preload="metadata"
+      quality={{ autoLabel: autoLevelLabel, onChange: (value) => { if (hlsRef.current) hlsRef.current.currentLevel = value; setQuality(value); }, options: qualities, value: quality }}
+      resumeAt={resumeAt}
+      stage={{ index: stage, labels: stageLabels }}
+      status={status}
+      subtitle={subtitle}
+      title={title}
+      upNext={next ? { onPlay: playNext, title: next.title } : null}
+      videoRef={videoRef}
+    />
+  );
 }
