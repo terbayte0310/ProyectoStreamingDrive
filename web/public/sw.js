@@ -256,25 +256,6 @@ function proxyFallback(url) {
   return `/api/drive-token/media-playback/packages/${encodeURIComponent(packageId)}/${encodedPath}`;
 }
 
-// Chrome suele pedir un MP4 como un rango abierto ("bytes=196608-"). Drive
-// devuelve correctamente el resto completo del archivo, pero por defecto lo
-// marca como `max-age=0` y `attachment`; eso hacía que el navegador pidiera
-// repetidamente los mismos bytes durante una sola clase. La copia es privada
-// al perfil del lector y breve: no se comparte entre usuarios ni queda como
-// una caché pública de Drive.
-function prepareCourseStreamResponse(response) {
-  if (!response.ok) return response;
-  const headers = new Headers(response.headers);
-  headers.set("Accept-Ranges", "bytes");
-  headers.set("Cache-Control", "private, max-age=900");
-  headers.delete("Content-Disposition");
-  return new Response(response.body, {
-    headers,
-    status: response.status,
-    statusText: response.statusText,
-  });
-}
-
 async function handleDirectHls(event, url) {
   const fileId = decodeURIComponent(url.pathname.slice("/drive-hls/".length));
   const fallback = proxyFallback(url);
@@ -352,7 +333,6 @@ self.addEventListener("fetch", (event) => {
     const driveUrl = isDownloadRequest
       ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=webContentLink`
       : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
-    const response = await budgetedDriveFetch(event, fileId, isDownloadRequest ? "download" : "stream", range, () => fetchFromDrive(driveUrl, headers));
-    return isStreamRequest ? prepareCourseStreamResponse(response) : response;
+    return budgetedDriveFetch(event, fileId, isDownloadRequest ? "download" : "stream", range, () => fetchFromDrive(driveUrl, headers));
   })());
 });
