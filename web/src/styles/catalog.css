@@ -165,7 +165,9 @@
 @keyframes backdrop-in { from { opacity: 0.6; transform: scale(1.03); } }
 .detail-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgb(8 6 12 / 0.95) 0%, rgb(8 6 12 / 0.7) 42%, rgb(8 6 12 / 0.2) 80%), linear-gradient(0deg, var(--bg) 0%, transparent 32%); }
 .detail-hero-inner { display: grid; min-height: inherit; grid-template-columns: minmax(180px, 300px) minmax(0, 1fr); align-items: end; gap: clamp(1.5rem, 4vw, 4rem); padding: calc(var(--header-h) + 3rem) 0 clamp(2.5rem, 6vw, 4.5rem); }
-.detail-poster { overflow: hidden; border-radius: var(--radius-l); box-shadow: 0 40px 80px -30px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.1); animation: rise 900ms var(--ease-out) both; }
+.detail-poster { overflow: hidden; border-radius: var(--radius-l); box-shadow: 0 40px 80px -30px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.1); }
+/* Sin animación de entrada propia: la portada llega por el morfismo desde el catálogo. Un fundido desde transparente
+   la hacía desaparecer y reaparecer cuando los datos sustituían al esqueleto. */
 .detail-poster img, .detail-poster .poster-fallback { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; }
 .detail-copy { display: grid; gap: 1.1rem; max-width: 760px; }
 .detail-copy > * { animation: rise 900ms var(--ease-out) both; }

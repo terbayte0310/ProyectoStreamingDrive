@@ -33,9 +33,13 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
   const headerRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const thumbRef = useRef<HTMLSpanElement>(null);
+  const placedOnce = useRef(false);
   const [signingOut, setSigningOut] = useState(false);
   const items = moduleOrder.filter((module) => modules.includes(module)).map((module) => moduleItems[module]);
   const accountActive = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
+  // Las fichas de película y serie llevan la cabecera flotando sobre una imagen oscura. Como la cabecera
+  // del catálogo vive en un layout y no se remonta, el tono se deduce de la ruta.
+  const dark = tone === "media" || /^\/catalog\/(movies|series)\/[^/]+/.test(pathname);
 
   useEffect(() => {
     const header = headerRef.current;
@@ -47,16 +51,16 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
     update();
     window.addEventListener("scroll", update, { passive: true });
     return () => window.removeEventListener("scroll", update);
-  }, []);
+  }, [pathname]);
 
   // La píldora activa se desliza hasta el enlace actual.
   useLayoutEffect(() => {
     const nav = navRef.current;
     const thumb = thumbRef.current;
     if (!nav || !thumb) return;
-    // Al montar la cabecera (cada página trae la suya) la píldora se coloca al
-    // instante: así el navegador la ve ya en su sitio y la desliza desde la
-    // pestaña anterior con la transición de vista, en vez de crecer desde cero.
+    // Se coloca al instante: el movimiento entre pestañas lo hace la transición de vista, que
+    // necesita ver la píldora ya en su sitio nuevo (con una transición CSS la vería a medio camino).
+    // Si el navegador no soporta transiciones de vista, se desliza con CSS. Al montar, nunca crece desde cero.
     const place = (animate: boolean) => {
       const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
       if (!active) { delete thumb.dataset.ready; return; }
@@ -66,7 +70,8 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
       thumb.dataset.ready = "";
       if (!animate) { void thumb.offsetWidth; thumb.style.removeProperty("transition"); }
     };
-    place(false);
+    place(placedOnce.current && typeof document.startViewTransition !== "function");
+    placedOnce.current = true;
     const observer = new ResizeObserver(() => place(true));
     observer.observe(nav);
     return () => observer.disconnect();
@@ -81,7 +86,7 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
 
   return (
     <>
-      <header className={`site-header${tone === "media" ? " site-header-dark" : ""}`} ref={headerRef}>
+      <header className={`site-header${dark ? " site-header-dark" : ""}`} ref={headerRef}>
         <div className="site-header-inner">
           <Brand href={items[0]?.href ?? "/catalog"} />
           <nav aria-label="Secciones de la biblioteca" className="main-nav" ref={navRef}>

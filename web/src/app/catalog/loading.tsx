@@ -1,13 +1,13 @@
 import type { CSSProperties } from "react";
 
-// Límite de Suspense del catálogo: el shell se pinta al instante y estas
-// siluetas ocupan su lugar mientras llega la consulta. Cubre /catalog/cursos,
-// /movies, /series y sus fichas.
+// Límite de Suspense del catálogo: estas siluetas ocupan el lugar del contenido
+// mientras llega la consulta. La cabecera no forma parte del esqueleto: vive en
+// catalog/layout.tsx y permanece en pantalla. Cubre /catalog/cursos, /movies,
+// /series y sus fichas.
 export default function CatalogLoading() {
   return (
-    <div aria-busy="true" className="shell">
-      <div className="site-header"><div className="site-header-inner"><div className="skeleton" style={{ width: 130, height: 30, borderRadius: 99 }} /></div></div>
-      <main className="shell-main container">
+    <>
+      <main aria-busy="true" className="shell-main container">
         <span className="sr-only">Cargando tu biblioteca…</span>
         <section aria-hidden="true" className="spotlight" style={{ display: "grid", alignItems: "end" }}>
           <div className="spotlight-copy" style={{ width: "100%" }}>
@@ -36,6 +36,6 @@ export default function CatalogLoading() {
           </div>
         </section>
       </main>
-    </div>
+    </>
   );
 }

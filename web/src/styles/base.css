@@ -357,8 +357,10 @@ kbd, .kbd {
 ::view-transition-group(site-header) { animation: none; z-index: 100; }
 ::view-transition-old(site-header) { display: none; }
 ::view-transition-new(site-header) { animation: none; }
-/* La píldora va POR DEBAJO de la cabecera (z-index 100): si no, taparía el texto de la pestaña activa. */
-::view-transition-group(nav-thumb) { z-index: 99; animation-duration: 420ms; animation-timing-function: var(--ease-out); }
+/* Capas, de abajo arriba: cabecera (100, con su fondo de cristal) < píldora (101) < textos de las pestañas (102).
+   La píldora debe ir sobre el cristal para verse, y el texto sobre la píldora para poder leerse. */
+::view-transition-group(nav-thumb) { z-index: 101; animation-duration: 420ms; animation-timing-function: var(--ease-out); }
+::view-transition-group(nav-links) { z-index: 102; }
 ::view-transition-image-pair(nav-thumb) { isolation: auto; }
 ::view-transition-old(nav-thumb), ::view-transition-new(nav-thumb) { animation: none; mix-blend-mode: normal; height: 100%; }
 /* Sin pareja (la página de destino no tiene cabecera, como el reproductor): se desvanece en vez de quedarse flotando. */

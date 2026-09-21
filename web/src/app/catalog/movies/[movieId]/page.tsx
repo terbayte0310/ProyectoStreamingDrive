@@ -4,7 +4,6 @@ import { ViewTransition } from "react";
 
 import { Icon } from "@/components/icons";
 import { Backdrop, formatRuntime, MediaPoster, type TmdbCatalogMetadata, TmdbAttribution, yearOf } from "@/components/media-catalog";
-import { SiteHeader } from "@/components/site-header";
 import { requireAuthorizedAccess } from "@/lib/auth/access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -28,8 +27,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ mo
   const year = yearOf(metadata);
 
   return (
-    <div className="shell">
-      <SiteHeader tone="media" />
+    <>
       <main className="shell-main">
         <section className="detail-hero">
           <div className="detail-backdrop"><Backdrop morphId={movie.id} path={metadata?.backdrop_path ?? metadata?.poster_path} title={title} /></div>
@@ -59,6 +57,6 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ mo
         </section>
         <div className="container"><TmdbAttribution /></div>
       </main>
-    </div>
+    </>
   );
 }

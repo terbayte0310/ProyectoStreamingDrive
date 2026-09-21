@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { type ComponentProps, useEffect, useRef, useState } from "react";
 
+import { rememberPoster } from "@/lib/media/poster-handoff";
+
 const dwellMs = 700;
 
 /**
@@ -23,8 +25,11 @@ const dwellMs = 700;
  * pocos destinos muy probables, como las pestañas de la cabecera: pasar el ratón
  * y pulsar en menos de un segundo no da tiempo a que termine una precarga de
  * una página grande.
+ *
+ * Con `posterId`, al pulsar se recuerda la portada que se está viendo para que el
+ * esqueleto de la ficha la muestre y el morfismo no se pierda (ver poster-handoff).
  */
-export function IntentLink({ dwellPrefetch = false, idlePrefetch = false, onFocus, onPointerDown, onPointerEnter, prefetch = null, ...props }: ComponentProps<typeof Link> & { dwellPrefetch?: boolean; idlePrefetch?: boolean }) {
+export function IntentLink({ dwellPrefetch = false, idlePrefetch = false, onClick, onFocus, onPointerDown, onPointerEnter, posterId, prefetch = null, ...props }: ComponentProps<typeof Link> & { dwellPrefetch?: boolean; idlePrefetch?: boolean; posterId?: string }) {
   const [intent, setIntent] = useState(false);
   const ref = useRef<HTMLAnchorElement>(null);
   const isCurrent = props["aria-current"] === "page";
@@ -52,6 +57,13 @@ export function IntentLink({ dwellPrefetch = false, idlePrefetch = false, onFocu
   return (
     <Link
       {...props}
+      onClick={(event) => {
+        if (posterId) {
+          const image = event.currentTarget.querySelector("img");
+          if (image?.currentSrc) rememberPoster({ id: posterId, src: image.currentSrc, title: image.alt });
+        }
+        onClick?.(event);
+      }}
       onFocus={(event) => { setIntent(true); onFocus?.(event); }}
       onPointerDown={(event) => { setIntent(true); onPointerDown?.(event); }}
       onPointerEnter={(event) => { setIntent(true); onPointerEnter?.(event); }}

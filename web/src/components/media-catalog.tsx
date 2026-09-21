@@ -74,7 +74,7 @@ export function Backdrop({ morphId, path, title }: { morphId?: string; path: str
 
 export function PosterCard({ href, id, index = 0, metadata, title }: { href: string; id: string; index?: number; metadata?: TmdbCatalogMetadata; title: string }) {
   return (
-    <IntentLink className="poster-card" dwellPrefetch href={href} style={{ "--i": index } as CSSProperties} transitionTypes={["nav-forward"]}>
+    <IntentLink className="poster-card" dwellPrefetch href={href} posterId={id} style={{ "--i": index } as CSSProperties} transitionTypes={["nav-forward"]}>
       <ViewTransition default="none" name={`poster-${id}`} share="nb-morph">
         <div className="poster-frame" data-spotlight="" data-tilt="9">
           <MediaPoster posterPath={metadata?.poster_path ?? null} title={title} />

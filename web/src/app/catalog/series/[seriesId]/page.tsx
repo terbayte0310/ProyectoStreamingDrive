@@ -5,7 +5,6 @@ import { ViewTransition } from "react";
 import { Icon } from "@/components/icons";
 import { Backdrop, MediaPoster, type TmdbCatalogMetadata, TmdbAttribution, yearOf } from "@/components/media-catalog";
 import { SeasonBrowser, SeriesPlayButton, type SeasonView } from "@/components/season-browser";
-import { SiteHeader } from "@/components/site-header";
 import { requireAuthorizedAccess } from "@/lib/auth/access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -71,8 +70,7 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
   const year = yearOf(metadata);
 
   return (
-    <div className="shell">
-      <SiteHeader tone="media" />
+    <>
       <main className="shell-main">
         <section className="detail-hero">
           <div className="detail-backdrop"><Backdrop morphId={series.id} path={metadata?.backdrop_path ?? metadata?.poster_path} title={title} /></div>
@@ -106,6 +104,6 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
           <TmdbAttribution />
         </div>
       </main>
-    </div>
+    </>
   );
 }

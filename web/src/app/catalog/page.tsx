@@ -6,7 +6,6 @@ import { CourseCover } from "@/components/course-cover";
 import { Icon } from "@/components/icons";
 import { IntentLink } from "@/components/intent-link";
 import { Rail } from "@/components/rail";
-import { SiteHeader } from "@/components/site-header";
 import { Spotlight, type SpotlightSlide } from "@/components/spotlight";
 import { getViewer, type LibraryModule } from "@/lib/auth/access";
 import { readMonotonicTime } from "@/lib/server-timing";
@@ -107,8 +106,7 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
   }));
 
   return (
-    <div className="shell">
-      <SiteHeader />
+    <>
       <main className="shell-main container">
         {deniedModule ? (
           <div className="notice notice-warn" style={{ marginTop: 16 }}>
@@ -155,6 +153,6 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
           </>
         ) : null}
       </main>
-    </div>
+    </>
   );
 }

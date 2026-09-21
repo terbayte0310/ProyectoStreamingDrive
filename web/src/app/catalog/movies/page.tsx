@@ -2,7 +2,6 @@ import { CatalogCollection } from "@/components/catalog-collection";
 import { Icon } from "@/components/icons";
 import { IntentLink } from "@/components/intent-link";
 import { Backdrop, metadataSummary, PosterCard, type TmdbCatalogMetadata, TmdbAttribution } from "@/components/media-catalog";
-import { SiteHeader } from "@/components/site-header";
 import { Spotlight, type SpotlightSlide } from "@/components/spotlight";
 import { requireAuthorizedAccess } from "@/lib/auth/access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -43,8 +42,7 @@ export default async function MoviesCatalogPage() {
   }));
 
   return (
-    <div className="shell">
-      <SiteHeader />
+    <>
       <main className="shell-main container">
         {!hasMovies ? (
           <section className="empty-state" style={{ marginTop: 32 }}>
@@ -77,6 +75,6 @@ export default async function MoviesCatalogPage() {
         ) : null}
         <TmdbAttribution />
       </main>
-    </div>
+    </>
   );
 }
