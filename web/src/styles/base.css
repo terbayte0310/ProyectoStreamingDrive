@@ -341,14 +341,15 @@ kbd, .kbd {
 /* Transiciones de página (React <ViewTransition>) y tema -------------------- */
 ::view-transition-old(.nb-page) { animation: page-out 180ms var(--ease-in-out) both; }
 ::view-transition-new(.nb-page) { animation: page-in 380ms var(--ease-out) both; }
-@keyframes page-out { to { opacity: 0; transform: translateY(-6px); filter: blur(4px); } }
-@keyframes page-in { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } }
+/* Sin desenfoque en las animaciones de página: filtrar toda la pantalla en cada fotograma es lo más caro para la GPU y provoca tirones. */
+@keyframes page-out { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes page-in { from { opacity: 0; transform: translateY(12px); } }
 /* Deslizamiento con dirección: hacia delante la página entra por la derecha, hacia atrás por la izquierda. */
 ::view-transition-old(.nb-forward) { --nb-shift: -44px; animation: nb-fade 190ms var(--ease-in-out) reverse both, nb-slide 420ms var(--ease-in-out) reverse both; }
 ::view-transition-new(.nb-forward) { --nb-shift: 44px; animation: nb-fade 320ms var(--ease-out) 110ms both, nb-slide 460ms var(--ease-out) both; }
 ::view-transition-old(.nb-back) { --nb-shift: 44px; animation: nb-fade 190ms var(--ease-in-out) reverse both, nb-slide 420ms var(--ease-in-out) reverse both; }
 ::view-transition-new(.nb-back) { --nb-shift: -44px; animation: nb-fade 320ms var(--ease-out) 110ms both, nb-slide 460ms var(--ease-out) both; }
-@keyframes nb-fade { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: blur(0); } }
+@keyframes nb-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes nb-slide { from { translate: var(--nb-shift); } to { translate: 0; } }
 /* Los clics no se pierden mientras dura la animación. */
 ::view-transition { pointer-events: none; }

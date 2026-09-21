@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { CatalogCollection } from "@/components/catalog-collection";
 import { CourseCard, courseAction, courseTitle, type CourseView } from "@/components/course-card";
 import { CourseCover } from "@/components/course-cover";
 import { Icon } from "@/components/icons";
+import { IntentLink } from "@/components/intent-link";
 import { Rail } from "@/components/rail";
 import { SiteHeader } from "@/components/site-header";
 import { Spotlight, type SpotlightSlide } from "@/components/spotlight";
@@ -92,7 +92,7 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
   const slides: SpotlightSlide[] = featured.map((course, index) => ({
     actions: (
       <>
-        {course.destinationId ? <Link className="btn btn-primary btn-lg" href={`/course-player?lesson=${course.destinationId}`} transitionTypes={["nav-forward"]}><Icon name="play" />{courseAction(course)}</Link> : null}
+        {course.destinationId ? <IntentLink className="btn btn-primary btn-lg" href={`/course-player?lesson=${course.destinationId}`} transitionTypes={["nav-forward"]}><Icon name="play" />{courseAction(course)}</IntentLink> : null}
         <a className="btn btn-glass btn-lg" href="#biblioteca">Explorar cursos</a>
       </>
     ),

@@ -89,7 +89,7 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
             {items.map((item) => {
               const current = item.match(pathname);
               return (
-                <IntentLink aria-current={current ? "page" : undefined} className="nav-link" href={item.href} key={item.href}>
+                <IntentLink aria-current={current ? "page" : undefined} className="nav-link" href={item.href} idlePrefetch key={item.href} transitionTypes={["nav-lateral"]}>
                   <Icon name={item.icon} />
                   {item.label}
                 </IntentLink>
@@ -113,10 +113,10 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
             <span>{admin ? "Administrador" : "Lector"}</span>
           </div>
         </div>
-        <Link className="menu-item" href="/dashboard"><Icon name="user" />Mi espacio</Link>
-        {admin ? <Link className="menu-item" href="/admin"><Icon name="layers" />Administrar cursos</Link> : null}
-        {admin ? <Link className="menu-item" href="/admin/media"><Icon name="film" />Administrar películas y series</Link> : null}
-        {admin ? <Link className="menu-item" href="/admin/usage"><Icon name="settings" />Uso y cuotas</Link> : null}
+        <Link className="menu-item" href="/dashboard" transitionTypes={["nav-lateral"]}><Icon name="user" />Mi espacio</Link>
+        {admin ? <Link className="menu-item" href="/admin" transitionTypes={["nav-lateral"]}><Icon name="layers" />Administrar cursos</Link> : null}
+        {admin ? <Link className="menu-item" href="/admin/media" transitionTypes={["nav-lateral"]}><Icon name="film" />Administrar películas y series</Link> : null}
+        {admin ? <Link className="menu-item" href="/admin/usage" transitionTypes={["nav-lateral"]}><Icon name="settings" />Uso y cuotas</Link> : null}
         <button className="menu-item menu-item-danger" disabled={signingOut} onClick={() => void signOut()} type="button">
           <Icon name="logout" />{signingOut ? "Cerrando sesión…" : "Cerrar sesión"}
         </button>
@@ -124,12 +124,12 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
 
       <nav aria-label="Navegación inferior" className="tabbar">
         {items.map((item) => (
-          <IntentLink aria-current={item.match(pathname) ? "page" : undefined} className="tab-link" href={item.href} key={item.href}>
+          <IntentLink aria-current={item.match(pathname) ? "page" : undefined} className="tab-link" href={item.href} idlePrefetch key={item.href} transitionTypes={["nav-lateral"]}>
             <Icon name={item.icon} />
             {item.label}
           </IntentLink>
         ))}
-        <Link aria-current={accountActive ? "page" : undefined} className="tab-link" href="/dashboard">
+        <Link aria-current={accountActive ? "page" : undefined} className="tab-link" href="/dashboard" transitionTypes={["nav-lateral"]}>
           <Icon name="user" />
           Cuenta
         </Link>

@@ -111,6 +111,9 @@
 /* Tarjeta de curso ------------------------------------------------------- */
 .course-card { position: relative; display: flex; height: 100%; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface-1); box-shadow: var(--shadow-1); transition: transform var(--dur-3) var(--ease-out), box-shadow var(--dur-3) var(--ease-out), border-color var(--dur-3); }
 .course-card:hover { border-color: var(--line-2); box-shadow: var(--shadow-2); }
+/* Hay más de un centenar: el navegador no calcula el diseño de las que están fuera de pantalla.
+   Sin esto, montar la página de Cursos bloquea ~110 ms justo cuando arranca la transición. */
+.course-card { content-visibility: auto; contain-intrinsic-size: auto 349px; }
 .course-card-media { position: relative; flex: none; }
 .course-card .course-cover { aspect-ratio: 16 / 9; }
 .course-card-link { position: absolute; inset: 0; z-index: 4; border-radius: inherit; }

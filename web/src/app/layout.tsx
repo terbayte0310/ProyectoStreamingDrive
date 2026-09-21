@@ -41,8 +41,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <DriveWorkerWarmup />
         <SessionSignOutCoordinator />
         <InteractionLayer />
-        {/* Sin tipo, la página se funde (nb-page). Con transitionTypes en el enlace, desliza según la dirección. */}
-        <ViewTransition default="nb-page" update={{ "nav-back": "nb-back", "nav-forward": "nb-forward", default: "nb-page" }}>
+        {/* Solo animan las navegaciones con tipo: hacia delante y hacia atrás deslizan, y las laterales (pestañas) se funden.
+            Los cambios sin tipo, como el paso del esqueleto al contenido, no repiten otro fundido de toda la página. */}
+        <ViewTransition default="none" update={{ "nav-back": "nb-back", "nav-forward": "nb-forward", "nav-lateral": "nb-page", default: "none" }}>
           <div className="app-root">{children}</div>
         </ViewTransition>
         <TransferUsageNotice />
