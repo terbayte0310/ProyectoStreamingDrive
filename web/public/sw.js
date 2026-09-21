@@ -19,6 +19,9 @@ let budgetWarmUntil = 0;
 const budgetWarmMs = 90_000;
 const announcedTransferNotices = new Set();
 const maxTransferRetries = 2;
+// Tamaño total de cada archivo, devuelto por la reserva. Google no expone
+// Content-Range a las peticiones con CORS y Safari lo exige en vídeo por rangos.
+const fileSizes = new Map();
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -141,6 +144,8 @@ async function reserveTransfer(fileId, kind, range) {
       warningLimitBytes: Number(data.globalWarningLimitBytes) || undefined,
     });
   }
+  const fileSize = Number(data.fileSize);
+  if (Number.isSafeInteger(fileSize) && fileSize > 0) fileSizes.set(fileId, fileSize);
   return { reservationId: data.reservationId };
 }
 
@@ -290,6 +295,34 @@ async function handleDirectHls(event, url) {
   return new Response(response.body, { headers: out, status: response.status, statusText: response.statusText });
 }
 
+/**
+ * Devuelve la respuesta de Google con las cabeceras de rango completas.
+ * Google no expone Content-Range ni Accept-Ranges a peticiones CORS, y Safari
+ * rechaza vídeo por rangos si faltan. Si no se puede calcular con seguridad,
+ * se devuelve la respuesta original sin tocar.
+ */
+function withRangeHeaders(response, range, total) {
+  if (!response.ok || !Number.isSafeInteger(total) || total <= 0) return response;
+  const length = Number(response.headers.get("content-length"));
+  if (!Number.isSafeInteger(length) || length <= 0) return response;
+
+  const headers = new Headers();
+  headers.set("content-type", response.headers.get("content-type") || "video/mp4");
+  headers.set("content-length", String(length));
+  headers.set("accept-ranges", "bytes");
+
+  if (response.status === 206) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range ?? "");
+    if (!match || (!match[1] && !match[2])) return response;
+    const start = match[1] ? Number(match[1]) : Math.max(total - Number(match[2]), 0);
+    if (!Number.isSafeInteger(start) || start + length > total) return response;
+    headers.set("content-range", `bytes ${start}-${start + length - 1}/${total}`);
+  } else if (response.status !== 200) {
+    return response;
+  }
+  return new Response(response.body, { headers, status: response.status, statusText: response.statusText });
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location?.origin && self.location) return;
@@ -331,18 +364,23 @@ self.addEventListener("fetch", (event) => {
     if (!driveAccessToken && !(await refreshAccessToken())) {
       return new Response("Drive authorization is missing.", { status: 401 });
     }
-    const headers = new Headers(event.request.headers);
-    const range = headers.get("Range");
+    // Solo se reenvía Range. Safari añade cabeceras propias a sus peticiones de
+    // vídeo (X-Playback-Session-Id): Google las rechaza en la verificación previa
+    // de CORS y la lectura falla. La ruta HLS ya enviaba solo Range.
+    const range = event.request.headers.get("Range");
+    const headers = new Headers();
+    if (range) headers.set("Range", range);
     if (isDownloadRequest) headers.set("Accept", "application/json");
     const driveUrl = isDownloadRequest
       ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=webContentLink`
       : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
-    return budgetedDriveFetch(
+    const response = await budgetedDriveFetch(
       event,
       fileId,
       isDownloadRequest ? "download" : "stream",
       range,
       () => fetchFromDrive(driveUrl, headers),
     );
+    return isStreamRequest ? withRangeHeaders(response, range, fileSizes.get(fileId)) : response;
   })());
 });

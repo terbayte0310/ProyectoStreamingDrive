@@ -164,6 +164,7 @@ export async function POST(request: NextRequest) {
   return noStoreJson({
     allowed: true,
     emergencyLimitBytes: data.emergency_limit_bytes,
+    fileSize: Number(byteSize),
     globalWarningLimitBytes: data.global_warning_limit_bytes,
     globalWarning: data.global_warning,
     reservationId: data.reservation_id,
