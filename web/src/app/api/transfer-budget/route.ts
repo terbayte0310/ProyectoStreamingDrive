@@ -28,7 +28,18 @@ type RequestBody = {
   outcome?: unknown;
   range?: unknown;
   reservationId?: unknown;
+  items?: unknown;
 };
+
+// Tamaño y origen de cada archivo por usuario: un reproductor pide cientos de
+// segmentos y la respuesta no cambia entre ellos. La lectura real de Drive sigue
+// exigiendo el token, así que la caché solo evita consultas repetidas al contador.
+type FileLookup = { byteSize: number; course: boolean; expires: number };
+const fileLookups = new Map<string, FileLookup>();
+const fileLookupTtlMs = 5 * 60_000;
+const fileLookupMax = 2000;
+const settleBatchLimit = 100;
+const uuidPattern = /^[0-9a-f-]{36}$/i;
 
 function noStoreJson(body: object, init?: ResponseInit) {
   const response = NextResponse.json(body, init);
@@ -48,7 +59,7 @@ function isSameOrigin(request: NextRequest) {
 async function getAuthorizedClient() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
-  return error || !data?.claims.sub ? null : supabase;
+  return error || !data?.claims.sub ? null : { supabase, userId: data.claims.sub };
 }
 
 export async function POST(request: NextRequest) {
@@ -61,11 +72,30 @@ export async function POST(request: NextRequest) {
     return noStoreJson({ code: "invalid_request", error: "La solicitud no es válida." }, { status: 400 });
   }
 
-  const supabase = await getAuthorizedClient();
-  if (!supabase) return noStoreJson({ code: "unauthorized", error: "Debes iniciar sesión con una cuenta autorizada." }, { status: 401 });
+  const authorized = await getAuthorizedClient();
+  if (!authorized) return noStoreJson({ code: "unauthorized", error: "Debes iniciar sesión con una cuenta autorizada." }, { status: 401 });
+  const { supabase, userId } = authorized;
+
+  // Varias liberaciones en una sola petición: el Service Worker las agrupa.
+  if (body.operation === "settle") {
+    const items = Array.isArray(body.items) ? body.items : null;
+    if (!items || items.length > settleBatchLimit) {
+      return noStoreJson({ code: "invalid_request", error: "La solicitud no es válida." }, { status: 400 });
+    }
+    const ids = items
+      .map((item) => (item && typeof item === "object" ? (item as { reservationId?: unknown }).reservationId : null))
+      .filter((id): id is string => typeof id === "string" && uuidPattern.test(id));
+    let completed = 0;
+    for (let index = 0; index < ids.length; index += 10) {
+      const results = await Promise.all(ids.slice(index, index + 10).map((id) => supabase.rpc("release_transfer_usage", { p_reservation_id: id })));
+      if (results.some((result) => result.error)) return noStoreJson({ code: "counter_unavailable", error: "No se pudo actualizar el contador." }, { status: 503 });
+      completed += results.filter((result) => Boolean(result.data)).length;
+    }
+    return noStoreJson({ completed });
+  }
 
   if (body.operation === "confirm" || body.operation === "release") {
-    if (typeof body.reservationId !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservationId)) {
+    if (typeof body.reservationId !== "string" || !uuidPattern.test(body.reservationId)) {
       return noStoreJson({ code: "invalid_reservation", error: "La reserva no es válida." }, { status: 400 });
     }
     if (body.operation === "confirm") {
@@ -110,30 +140,40 @@ export async function POST(request: NextRequest) {
     return noStoreJson({ code: "invalid_request", error: "La solicitud de transferencia no es válida." }, { status: 400 });
   }
 
-  const { data: courseItem, error: courseItemError } = await supabase
-    .from("drive_items")
-    .select("byte_size")
-    .eq("drive_file_id", body.fileId)
-    .eq("status", "available")
-    .limit(1)
-    .maybeSingle<{ byte_size: number | null }>();
-  if (courseItemError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
-
-  // Los segmentos HLS no forman parte del inventario de Cursos. Su política
-  // RLS comprueba el módulo y el contenido antes de permitir la lectura.
-  const { data: mediaAsset, error: mediaAssetError } = courseItem
-    ? { data: null, error: null }
-    : await supabase
-      .from("media_hls_assets")
+  const lookupKey = `${userId}:${body.fileId}`;
+  let lookup = fileLookups.get(lookupKey);
+  if (lookup && lookup.expires < Date.now()) { fileLookups.delete(lookupKey); lookup = undefined; }
+  if (!lookup) {
+    const { data: courseItem, error: courseItemError } = await supabase
+      .from("drive_items")
       .select("byte_size")
       .eq("drive_file_id", body.fileId)
-      .eq("is_active", true)
+      .eq("status", "available")
       .limit(1)
       .maybeSingle<{ byte_size: number | null }>();
-  if (mediaAssetError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
+    if (courseItemError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
 
-  const byteSize = courseItem?.byte_size ?? mediaAsset?.byte_size;
-  if (byteSize === undefined) return noStoreJson({ code: "file_not_allowed", error: "El archivo no pertenece a la biblioteca disponible." }, { status: 403 });
+    // Los segmentos HLS no forman parte del inventario de Cursos. Su política
+    // RLS comprueba el módulo y el contenido antes de permitir la lectura.
+    const { data: mediaAsset, error: mediaAssetError } = courseItem
+      ? { data: null, error: null }
+      : await supabase
+        .from("media_hls_assets")
+        .select("byte_size")
+        .eq("drive_file_id", body.fileId)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle<{ byte_size: number | null }>();
+    if (mediaAssetError) return noStoreJson({ code: "counter_unavailable", error: "No se pudo comprobar la transferencia." }, { status: 503 });
+
+    const found = courseItem ?? mediaAsset;
+    if (found?.byte_size === undefined || found.byte_size === null) return noStoreJson({ code: "file_not_allowed", error: "El archivo no pertenece a la biblioteca disponible." }, { status: 403 });
+    lookup = { byteSize: found.byte_size, course: Boolean(courseItem), expires: Date.now() + fileLookupTtlMs };
+    if (fileLookups.size >= fileLookupMax) fileLookups.delete(fileLookups.keys().next().value as string);
+    fileLookups.set(lookupKey, lookup);
+  }
+  const isCourse = lookup.course;
+  const byteSize = lookup.byteSize;
 
   let requestBytes: number;
   try {
@@ -144,7 +184,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { data, error } = await supabase
-    .rpc("reserve_transfer_usage", { p_module: courseItem ? "courses" : "media", p_request_bytes: requestBytes })
+    .rpc("reserve_transfer_usage", { p_module: isCourse ? "courses" : "media", p_request_bytes: requestBytes })
     .single<ReserveResult>();
   if (error || !data) return noStoreJson({ code: "counter_unavailable", error: "El contador está temporalmente indisponible." }, { status: 503 });
 

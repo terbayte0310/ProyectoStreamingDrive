@@ -115,7 +115,10 @@ test("reserves before Drive and confirms an accepted range", async () => {
 
   assert.equal(response?.status, 206);
   assert.ok(reserveIndex >= 0 && reserveIndex < driveIndex);
-  assert.deepEqual(operations, ["reserve", "confirm"]);
+  // Las confirmaciones viajan agrupadas en una sola petición diferida.
+  assert.deepEqual(operations, ["reserve", "settle"]);
+  const settle = JSON.parse(worker.fetchCalls.filter((call) => call.url === "/api/transfer-budget")[1]?.body ?? "{}");
+  assert.deepEqual(settle.items, [{ operation: "confirm", reservationId: "00000000-0000-4000-8000-000000000001" }]);
 });
 
 test("the emergency fuse blocks a new request before Drive", async () => {

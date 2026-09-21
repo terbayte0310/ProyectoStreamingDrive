@@ -149,12 +149,32 @@ async function reserveTransfer(fileId, kind, range) {
   return { reservationId: data.reservationId };
 }
 
-async function settleTransfer(operation, reservationId) {
-  try {
-    await requestBudget({ operation, reservationId });
-  } catch {
-    // The reservation remains counted and expires safely if finalization fails.
+// Las confirmaciones y liberaciones no bloquean ninguna descarga: se agrupan y
+// viajan juntas cada pocos segundos en lugar de una petición por segmento. Si
+// el worker se detiene antes de enviarlas, la reserva sigue contada y caduca sola.
+const settleQueue = [];
+const settleDelayMs = 4000;
+const settleBatchMax = 40;
+let settleFlush = null;
+
+async function flushSettles() {
+  settleFlush = null;
+  while (settleQueue.length) {
+    const items = settleQueue.splice(0, settleBatchMax);
+    try {
+      await requestBudget({ items, operation: "settle" });
+    } catch {
+      // La reserva sigue contada y caduca de forma segura si el envío falla.
+    }
   }
+}
+
+/** Devuelve una promesa para event.waitUntil: mantiene vivo el worker hasta el envío. */
+function settleTransfer(operation, reservationId) {
+  settleQueue.push({ operation, reservationId });
+  if (settleQueue.length >= settleBatchMax) return flushSettles();
+  settleFlush ??= wait(settleDelayMs).then(flushSettles);
+  return settleFlush;
 }
 
 async function refreshAccessToken() {
@@ -243,13 +263,13 @@ async function budgetedDriveFetch(event, fileId, kind, range, driveRequest) {
 
   const result = await drivePromise;
   if (result.error || !result.response) {
-    await settleTransfer("release", reservation.reservationId);
+    event.waitUntil(settleTransfer("release", reservation.reservationId));
     void announceTransferNotice("drive-unavailable");
     return new Response("Google Drive está temporalmente indisponible.", { status: 503 });
   }
   const response = result.response;
   if (!response.ok) {
-    await settleTransfer("release", reservation.reservationId);
+    event.waitUntil(settleTransfer("release", reservation.reservationId));
     if (response.status === 429 || response.status >= 500) void announceTransferNotice("drive-unavailable");
     return response;
   }
