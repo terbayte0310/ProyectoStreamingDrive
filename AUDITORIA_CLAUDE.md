@@ -21,8 +21,8 @@ Con 900 Mb/s la página “no carga muy rápido” porque **el problema no es el
 | 5 | Reserva de transferencia secuencial antes de cada lectura, con `getUser()` remoto | +1 viaje completo al servidor antes del primer byte | **Corregido** |
 | 6 | El aula de cursos encadenaba 4 viajes desde el navegador | Pantalla de carga larga en cada lección | **Corregido** (carga en servidor + cambio de lección instantáneo) |
 | 7 | **Una sola calidad de vídeo a ~12 Mb/s** | Imposible en conexiones < 12 Mb/s; sin calidad adaptativa | **Pendiente — la mejora más importante que queda** |
-| 8 | MP4 de cursos posiblemente sin `faststart` y con bitrates altos | El navegador descarga el final del archivo antes de empezar | **Pendiente** (remux sin pérdida, gratis) |
-| 9 | Región de funciones de Vercel no alineada con Supabase/usuarios | Cada consulta suma decenas o cientos de ms | **Pendiente** (1 ajuste de configuración) |
+| 8 | MP4 de cursos sin `faststart` o con el vídeo troceado en muchos bloques `mdat` | El navegador hace decenas de peticiones a Drive antes de empezar (25-88 s) | **Corregido en 6 cursos** (remux sin pérdida, ver `docs/planificacion/08-preparacion-de-biblioteca-para-drive.md`). Los cursos con solo `moov` al final cuestan ~2-3 s y no se han tocado |
+| 9 | Región de funciones de Vercel no alineada con Supabase/usuarios | Cada consulta suma decenas o cientos de ms | **Verificado y fijado**: Supabase en `us-east-1`, funciones en `iad1`; `web/vercel.json` lo deja explícito |
 | 10 | Imágenes de TMDB pasando por la optimización de Vercel | Consume cuota gratuita y añade un salto | **Corregido** (CDN de TMDB con `srcset`) |
 
 Si solo haces una cosa después de este rediseño: **ejecuta la Fase B (escalera de calidades HLS)**. La escalera completa (1080p + 720p + 480p + 360p) **pesa menos que la calidad única actual**, así que ni siquiera necesitas más espacio en Drive.

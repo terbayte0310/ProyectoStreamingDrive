@@ -47,3 +47,6 @@ next-env.d.ts
 /scripts/output/
 biblioteca-de-cursos-507900-eb3747da92e0.json
 .vercel
+
+# Vídeo local de la vista de diseño (solo desarrollo)
+/public/dev-preview.mp4
