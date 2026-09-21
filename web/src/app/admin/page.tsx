@@ -40,6 +40,7 @@ export default async function AdminPage() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link className="btn btn-ghost btn-sm" href="/admin/media"><Icon name="film" />Películas y Series</Link>
+              <Link className="btn btn-ghost btn-sm" href="/admin/usage"><Icon name="settings" />Uso y cuotas</Link>
               <Link className="btn btn-ghost btn-sm" href="/catalog/cursos"><Icon name="eye" />Ver catálogo</Link>
             </div>
           </div>

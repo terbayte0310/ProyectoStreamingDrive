@@ -111,7 +111,7 @@ async function requestBudget(payload) {
 async function reserveTransfer(fileId, kind, range) {
   let response;
   try {
-    response = await requestBudget({ fileId, kind, operation: "reserve", range });
+    response = await requestBudget({ fileId, kind, module: driveModule, operation: "reserve", range });
   } catch {
     void announceTransferNotice("counter-unavailable");
     return { error: new Response("La medición de transferencia está temporalmente indisponible.", { status: 503 }) };
@@ -215,6 +215,10 @@ async function fetchFromDrive(url, requestHeaders) {
     transientRetries += 1;
   }
 }
+
+// No se inspecciona ni transforma el cuerpo del MP4 en el Service Worker.
+// La prueba de TransformStream bloqueó la reproducción nativa; la medición se
+// observa desde PerformanceResourceTiming en la página de validación.
 
 /** Reserva + descarga. Secuencial en frío, en paralelo cuando hay una reserva reciente aprobada. */
 async function budgetedDriveFetch(event, fileId, kind, range, driveRequest) {
@@ -333,6 +337,12 @@ self.addEventListener("fetch", (event) => {
     const driveUrl = isDownloadRequest
       ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=webContentLink`
       : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
-    return budgetedDriveFetch(event, fileId, isDownloadRequest ? "download" : "stream", range, () => fetchFromDrive(driveUrl, headers));
+    return budgetedDriveFetch(
+      event,
+      fileId,
+      isDownloadRequest ? "download" : "stream",
+      range,
+      () => fetchFromDrive(driveUrl, headers),
+    );
   })());
 });

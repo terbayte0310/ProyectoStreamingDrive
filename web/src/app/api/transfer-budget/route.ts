@@ -22,7 +22,10 @@ type ReserveResult = {
 type RequestBody = {
   fileId?: unknown;
   kind?: unknown;
+  module?: unknown;
   operation?: unknown;
+  observedBytes?: unknown;
+  outcome?: unknown;
   range?: unknown;
   reservationId?: unknown;
 };
@@ -65,8 +68,33 @@ export async function POST(request: NextRequest) {
     if (typeof body.reservationId !== "string" || !/^[0-9a-f-]{36}$/i.test(body.reservationId)) {
       return noStoreJson({ code: "invalid_reservation", error: "La reserva no es válida." }, { status: 400 });
     }
-    const functionName = body.operation === "confirm" ? "confirm_transfer_usage" : "release_transfer_usage";
-    const { data, error } = await supabase.rpc(functionName, { p_reservation_id: body.reservationId });
+    if (body.operation === "confirm") {
+      const observedBytes = body.observedBytes;
+      const outcome = body.outcome;
+      // El flujo de vídeo directo no puede contabilizar de forma fiable un
+      // cuerpo MP4 continuo. Las confirmaciones sin medición se liberan: no
+      // contaminan el historial con el tamaño completo del rango solicitado.
+      if (observedBytes === undefined && outcome === undefined) {
+        const { data, error } = await supabase.rpc("release_transfer_usage", { p_reservation_id: body.reservationId });
+        if (error) return noStoreJson({ code: "counter_unavailable", error: "No se pudo actualizar el contador." }, { status: 503 });
+        return noStoreJson({ completed: Boolean(data) });
+      }
+      if (
+        !Number.isSafeInteger(observedBytes)
+        || (observedBytes as number) < 0
+        || (outcome !== "completed" && outcome !== "cancelled" && outcome !== "failed")
+      ) {
+        return noStoreJson({ code: "invalid_measurement", error: "La medición de entrega no es válida." }, { status: 400 });
+      }
+      const { data, error } = await supabase.rpc("confirm_transfer_usage", {
+        p_observed_bytes: observedBytes,
+        p_outcome: outcome,
+        p_reservation_id: body.reservationId,
+      });
+      if (error) return noStoreJson({ code: "counter_unavailable", error: "No se pudo actualizar el contador." }, { status: 503 });
+      return noStoreJson({ completed: Boolean(data) });
+    }
+    const { data, error } = await supabase.rpc("release_transfer_usage", { p_reservation_id: body.reservationId });
     if (error) return noStoreJson({ code: "counter_unavailable", error: "No se pudo actualizar el contador." }, { status: 503 });
     return noStoreJson({ completed: Boolean(data) });
   }
@@ -116,7 +144,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { data, error } = await supabase
-    .rpc("reserve_transfer_usage", { p_request_bytes: requestBytes })
+    .rpc("reserve_transfer_usage", { p_module: courseItem ? "courses" : "media", p_request_bytes: requestBytes })
     .single<ReserveResult>();
   if (error || !data) return noStoreJson({ code: "counter_unavailable", error: "El contador está temporalmente indisponible." }, { status: 503 });
 

@@ -44,6 +44,7 @@ export default async function AdminMediaPage() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link className="btn btn-ghost btn-sm" href="/admin"><Icon name="course" />Cursos</Link>
+              <Link className="btn btn-ghost btn-sm" href="/admin/usage"><Icon name="settings" />Uso y cuotas</Link>
               <Link className="btn btn-ghost btn-sm" href="/catalog/movies"><Icon name="eye" />Ver catálogo</Link>
             </div>
           </div>

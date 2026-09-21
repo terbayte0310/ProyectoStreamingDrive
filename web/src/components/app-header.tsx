@@ -110,6 +110,7 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
         <Link className="menu-item" href="/dashboard"><Icon name="user" />Mi espacio</Link>
         {admin ? <Link className="menu-item" href="/admin"><Icon name="layers" />Administrar cursos</Link> : null}
         {admin ? <Link className="menu-item" href="/admin/media"><Icon name="film" />Administrar películas y series</Link> : null}
+        {admin ? <Link className="menu-item" href="/admin/usage"><Icon name="settings" />Uso y cuotas</Link> : null}
         <button className="menu-item menu-item-danger" disabled={signingOut} onClick={() => void signOut()} type="button">
           <Icon name="logout" />{signingOut ? "Cerrando sesión…" : "Cerrar sesión"}
         </button>

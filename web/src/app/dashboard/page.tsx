@@ -85,6 +85,11 @@ export default async function DashboardPage() {
                     <div><h3 className="title-m">Películas y Series</h3><p>Importa inventarios, vincula TMDB y publica paquetes HLS.</p></div>
                     <span className="link-arrow">Administrar <span aria-hidden="true">→</span></span>
                   </Link>
+                  <Link className="module-card" data-spotlight="" data-tilt="4" href="/admin/usage">
+                    <span className="module-card-icon"><Icon name="settings" /></span>
+                    <div><h3 className="title-m">Uso y cuotas</h3><p>Revisa entregas medidas, reservas preventivas y límites de Drive.</p></div>
+                    <span className="link-arrow">Abrir reporte <span aria-hidden="true">→</span></span>
+                  </Link>
                 </div>
               </section>
             ) : null}

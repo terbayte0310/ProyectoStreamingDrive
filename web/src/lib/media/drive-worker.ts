@@ -3,7 +3,7 @@
 // Una sola revisión para todo el sitio. Antes la cabecera registraba
 // "budget-v1" y el reproductor "media-hls-v1": cada cambio de página
 // reinstalaba el worker y el reproductor esperaba hasta 5 s su activación.
-export const DRIVE_WORKER_REVISION = "nebula-v3";
+export const DRIVE_WORKER_REVISION = "nebula-v8";
 export const DRIVE_WORKER_URL = `/sw.js?revision=${DRIVE_WORKER_REVISION}`;
 
 type Module = "courses" | "movies" | "series";

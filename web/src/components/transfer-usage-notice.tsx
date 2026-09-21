@@ -18,8 +18,8 @@ function messageFor(notice: Notice) {
     case "counter-unavailable": return "La medición está temporalmente indisponible. La transferencia no comenzó; inténtalo nuevamente en unos minutos.";
     case "drive-unavailable": return "Google Drive está temporalmente indisponible. Nébula aplicó reintentos acotados sin multiplicar el tráfico.";
     case "emergency-fuse": return `El fusible global de ${formatGiB(notice.limitBytes, 750)} GiB detuvo nuevas transferencias. Las reproducciones ya iniciadas pueden terminar.`;
-    case "global-warning": return `La biblioteca superó ${formatGiB(notice.limitBytes, 150)} GiB en 24 horas. Es solo un aviso: puedes continuar reproduciendo.`;
-    case "user-warning": return `Superaste ${formatGiB(notice.limitBytes, 25)} GiB en 24 horas. Es solo un aviso: puedes continuar reproduciendo.`;
+    case "global-warning": return `La biblioteca superó ${formatGiB(notice.limitBytes, 150)} GiB en reservas de rango en 24 horas. Es solo un aviso preventivo: puedes continuar reproduciendo.`;
+    case "user-warning": return `Se solicitaron más de ${formatGiB(notice.limitBytes, 25)} GiB en rangos en 24 horas. Es un aviso preventivo, no una medición de consumo real de Drive.`;
   }
 }
 

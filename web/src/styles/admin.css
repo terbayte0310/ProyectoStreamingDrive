@@ -22,6 +22,22 @@
 .panel-head > div { display: grid; gap: 0.3rem; min-width: 0; }
 .panel-head p { margin: 0; color: var(--ink-2); font-size: 0.9rem; }
 .panel + .panel { margin-top: 18px; }
+/* Reporte de uso ------------------------------------------------------------- */
+.usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.usage-card { display: grid; align-content: start; gap: 0.7rem; min-height: 245px; }
+.usage-card h2 { margin: 0; }
+.usage-card p:not(.kicker) { margin: 0; color: var(--ink-2); font-size: 0.88rem; line-height: 1.55; }
+.usage-card small { color: var(--ink-3); font-size: 0.76rem; line-height: 1.45; }
+.usage-card-good { border-color: color-mix(in srgb, var(--mint) 42%, var(--line)); }
+.usage-value { margin-top: 0.05rem; color: var(--ink); font-family: var(--font-display); font-size: clamp(1.8rem, 3vw, 2.65rem); font-variation-settings: "opsz" 72; letter-spacing: -0.05em; line-height: 1; }
+.usage-section { margin-top: 18px; }
+.usage-breakdown { display: grid; gap: 8px; }
+.usage-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border-radius: var(--radius-s); background: var(--surface-2); }
+.usage-row > div { display: grid; gap: 0.2rem; min-width: 0; }
+.usage-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-row span { color: var(--ink-3); font-size: 0.78rem; }
+.usage-row b { flex: none; font-family: var(--font-mono); font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.usage-note { margin-top: 18px; }
 
 /* Lista maestra --------------------------------------------------------------- */
 .master { position: sticky; top: calc(var(--header-h) + 70px); display: flex; max-height: calc(100svh - var(--header-h) - 90px); flex-direction: column; overflow: hidden; }
@@ -137,6 +153,7 @@ main[class~="bg-slate-950"] .bg-white { color: var(--accent-ink) !important; bac
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .master { position: static; max-height: 420px; }
   .admin-hero { grid-template-columns: 1fr; }
+  .usage-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .form-grid { grid-template-columns: 1fr; }

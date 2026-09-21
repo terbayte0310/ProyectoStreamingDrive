@@ -2,23 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { DRIVE_WORKER_REVISION as workerRevision } from "@/lib/media/drive-worker";
+import { getDriveWorker, sendDriveToken, workerControlsPage } from "@/lib/media/drive-worker";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Candidate = { driveItemId: string; title: string };
+type DriveItem = { byte_size: number | null; drive_file_id: string; id: string };
 type EventLog = { label: string; value: string };
-
-function sendToken(worker: ServiceWorker, token: string) {
-  return new Promise<void>((resolve, reject) => {
-    const channel = new MessageChannel();
-    const timeout = window.setTimeout(() => reject(new Error("El Service Worker no confirmó el token.")), 3000);
-    channel.port1.onmessage = () => {
-      window.clearTimeout(timeout);
-      resolve();
-    };
-    worker.postMessage({ type: "drive-access-token", token }, [channel.port2]);
-  });
-}
 
 export default function DriveServiceWorkerValidationPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -29,34 +18,68 @@ export default function DriveServiceWorkerValidationPage() {
 
   const addLog = (label: string, value: string) => setLogs((current) => [{ label, value }, ...current].slice(0, 12));
 
+
+  useEffect(() => {
+    if (!source || !("PerformanceObserver" in window)) return;
+    const sourceUrl = new URL(source, window.location.href).href;
+    const seen = new Set<string>();
+    const report = (entry: PerformanceEntry) => {
+      if (entry.name !== sourceUrl || entry.entryType !== "resource") return;
+      const timing = entry as PerformanceResourceTiming;
+      const key = `${timing.startTime}-${timing.duration}-${timing.transferSize}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const transferMiB = (timing.transferSize / 1024 / 1024).toFixed(2);
+      const payloadMiB = (timing.encodedBodySize / 1024 / 1024).toFixed(2);
+      const value = timing.transferSize > 0
+        ? `${transferMiB} MiB transferidos; ${payloadMiB} MiB de payload (Performance Resource Timing)`
+        : "El navegador no expuso bytes para esta solicitud; la reproducción no se modifica.";
+      setLogs((current) => [{ label: "Medición nativa del navegador", value }, ...current].slice(0, 12));
+    };
+    const observer = new PerformanceObserver((list) => list.getEntries().forEach(report));
+    observer.observe({ buffered: true, type: "resource" });
+    return () => observer.disconnect();
+  }, [source]);
   useEffect(() => {
     async function prepare() {
       try {
         const supabase = createSupabaseBrowserClient();
-        const { data: lessons } = await supabase.from("lessons").select("detected_title, custom_title, drive_item_id");
+        const { data: lessons, error: lessonsError } = await supabase.from("lessons").select("detected_title, custom_title, drive_item_id").eq("is_visible", true);
+        if (lessonsError) throw new Error("No se pudieron leer las lecciones.");
         const candidates = (lessons ?? []).flatMap((lesson) => lesson.drive_item_id ? [{ driveItemId: lesson.drive_item_id, title: lesson.custom_title ?? lesson.detected_title }] : []) as Candidate[];
         if (!candidates.length) throw new Error("No hay lecciones importadas.");
-        const { data: items } = await supabase.from("drive_items").select("id, drive_file_id, byte_size").in("id", candidates.map((candidate) => candidate.driveItemId));
-        const itemById = new Map((items ?? []).map((item) => [item.id, item]));
-        const largest = [...candidates].sort((a, b) => (itemById.get(b.driveItemId)?.byte_size ?? 0) - (itemById.get(a.driveItemId)?.byte_size ?? 0))[0];
-        const item = itemById.get(largest.driveItemId);
-        if (!item) throw new Error("No se encontró el archivo de Drive.");
+        const itemChunks = Array.from({ length: Math.ceil(candidates.length / 200) }, (_, index) => candidates.slice(index * 200, index * 200 + 200).map((candidate) => candidate.driveItemId));
+        const itemResults = await Promise.all(itemChunks.map((ids) => supabase.from("drive_items").select("id, drive_file_id, byte_size").in("id", ids)));
+        if (itemResults.some((result) => result.error)) throw new Error("No se pudieron leer los archivos de Drive.");
+        const itemById = new Map(itemResults.flatMap((result) => (result.data ?? []) as DriveItem[]).filter((item) => Boolean(item.drive_file_id)).map((item) => [item.id, item]));
+        const usableCandidates = candidates.filter((candidate) => itemById.has(candidate.driveItemId));
+        if (!usableCandidates.length) throw new Error("No hay una lección visible con archivo de Drive disponible.");
+        const largestFirst = [...usableCandidates].sort((a, b) => (itemById.get(b.driveItemId)?.byte_size ?? 0) - (itemById.get(a.driveItemId)?.byte_size ?? 0));
 
-        const registration = await navigator.serviceWorker.register(`/sw.js?revision=${workerRevision}`, { scope: "/" });
-        await navigator.serviceWorker.ready;
+        const worker = await getDriveWorker();
+        if (!workerControlsPage()) throw new Error("El Service Worker se activó, pero aún no controla esta pestaña. Recarga una vez y vuelve a abrir la prueba.");
         const tokenResponse = await fetch("/api/drive-token", { cache: "no-store" });
         if (!tokenResponse.ok) throw new Error("Primero autoriza Drive en /drive-access.");
         const { accessToken } = (await tokenResponse.json()) as { accessToken: string };
-        const worker = registration.active ?? navigator.serviceWorker.controller;
-        if (!worker) throw new Error("Recarga una vez para activar el Service Worker.");
-        await sendToken(worker, accessToken);
-        const streamSource = `/drive-stream/${item.drive_file_id}`;
-        setTitle(largest.title);
-        setSource(streamSource);
-        addLog("Archivo seleccionado", `${Math.round((item.byte_size ?? 0) / 1024 / 1024)} MB`);
+        await sendDriveToken(worker, accessToken, "courses");
 
-        const rangeResponse = await fetch(streamSource, { headers: { Range: "bytes=0-1023" } });
-        addLog("Solicitud Range", `${rangeResponse.status} ${rangeResponse.status === 206 ? "Partial Content ✓" : "(se esperaba 206)"}`);
+        let selected: { item: DriveItem; source: string; title: string } | null = null;
+        for (const candidate of largestFirst.slice(0, 25)) {
+          const item = itemById.get(candidate.driveItemId);
+          if (!item) continue;
+          const candidateSource = `/drive-stream/${item.drive_file_id}?measurement=timing`;
+          const rangeResponse = await fetch(candidateSource, { headers: { Range: "bytes=0-1023" } });
+          if (rangeResponse.status === 206) {
+            selected = { item, source: candidateSource, title: candidate.title };
+            break;
+          }
+          await rangeResponse.body?.cancel();
+        }
+        if (!selected) throw new Error("No se encontró un archivo de Drive accesible entre las 25 lecciones de prueba.");
+        setTitle(selected.title);
+        setSource(selected.source);
+        addLog("Archivo seleccionado", `${Math.round((selected.item.byte_size ?? 0) / 1024 / 1024)} MB`);
+        addLog("Solicitud Range", "206 Partial Content ✓");
       } catch (error) {
         addLog("Preparación falló", error instanceof Error ? error.message : "Error desconocido");
       }
@@ -75,10 +98,9 @@ export default function DriveServiceWorkerValidationPage() {
     if (!source) return;
     setTestingRefresh(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const worker = registration.active ?? navigator.serviceWorker.controller;
-      if (!worker) throw new Error("El Service Worker no está activo.");
-      await sendToken(worker, "token-invalido-para-validar-renovacion");
+      const worker = await getDriveWorker();
+      if (!workerControlsPage()) throw new Error("El Service Worker no controla esta pestaña. Recarga la prueba.");
+      await sendDriveToken(worker, "token-invalido-para-validar-renovacion", "courses");
       const response = await fetch(source, { headers: { Range: "bytes=0-1023" } });
       if (response.status !== 206) {
         throw new Error(`Google/Worker respondió ${response.status}; se esperaba 206.`);
@@ -96,13 +118,14 @@ export default function DriveServiceWorkerValidationPage() {
       <section className="mx-auto w-full max-w-5xl rounded-3xl border border-slate-800 bg-slate-900/70 p-8 sm:p-12">
         <p className="text-sm font-semibold tracking-[0.2em] text-sky-300 uppercase">Validación de streaming</p>
         <h1 className="mt-3 text-3xl font-semibold">Prueba sobre el video más grande importado</h1>
-        <p className="mt-3 text-slate-300">{title ?? "Preparando autorización y archivo…"}</p>
+        <p className="mt-3 text-slate-300">{title ?? "Preparando autorización y archivo…"}. No modifica el catálogo ni guarda mediciones en Supabase.</p>
         {source ? (
           <>
             <video
               className="mt-7 aspect-video w-full rounded-2xl bg-black"
               controls
               onEnded={() => addLog("Evento ended", "Recibido ✓")}
+              onPlaying={() => addLog("Evento playing", "El navegador inició reproducción ✓")}
               onLoadedMetadata={(event) => addLog("loadedmetadata", `${event.currentTarget.duration.toFixed(1)} segundos ✓`)}
               onSeeked={(event) => addLog("Evento seeked", `posición ${event.currentTarget.currentTime.toFixed(1)} segundos ✓`)}
               onTimeUpdate={(event) => {
