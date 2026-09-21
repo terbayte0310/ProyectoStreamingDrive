@@ -259,6 +259,9 @@ where email = 'CORREO_AUTORIZADO';
 
 ## 7 · Autorizar Drive y sincronizar
 
+> [!IMPORTANT]
+> Antes de subir un curso nuevo a Drive, revisa la estructura de sus MP4 con `web/scripts/faststart-courses.ps1 -CheckOnly`. Un MP4 troceado en muchos bloques puede tardar más de 30 s en arrancar. Motivo y pasos en [`docs/planificacion/08-preparacion-de-biblioteca-para-drive.md`](docs/planificacion/08-preparacion-de-biblioteca-para-drive.md).
+
 ```mermaid
 sequenceDiagram
     participant A as Administrador
