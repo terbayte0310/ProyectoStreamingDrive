@@ -66,7 +66,7 @@ export default async function DashboardPage() {
                     </>
                   );
                   return enabled
-                    ? <Link className="module-card rise" data-spotlight="" data-tilt="4" href={item.href} key={item.module} style={{ "--i": index } as CSSProperties}>{content}</Link>
+                    ? <Link className="module-card rise" data-spotlight="" data-tilt="4" href={item.href} key={item.module} style={{ "--i": index } as CSSProperties} transitionTypes={["nav-forward"]}>{content}</Link>
                     : <div aria-disabled="true" className="module-card rise" key={item.module} style={{ "--i": index } as CSSProperties}>{content}</div>;
                 })}
               </div>

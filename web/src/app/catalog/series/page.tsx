@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import { CatalogCollection } from "@/components/catalog-collection";
 import { Icon } from "@/components/icons";
+import { IntentLink } from "@/components/intent-link";
 import { Backdrop, metadataSummary, PosterCard, type TmdbCatalogMetadata, TmdbAttribution } from "@/components/media-catalog";
 import { SiteHeader } from "@/components/site-header";
 import { Spotlight, type SpotlightSlide } from "@/components/spotlight";
@@ -30,7 +29,7 @@ export default async function SeriesCatalogPage() {
   const slides: SpotlightSlide[] = series.filter((item) => item.metadata?.backdrop_path).slice(-5).reverse().map((item) => ({
     actions: (
       <>
-        <Link className="btn btn-primary btn-lg" href={`/catalog/series/${item.id}`}><Icon name="play" />Ver temporadas</Link>
+        <IntentLink className="btn btn-primary btn-lg" href={`/catalog/series/${item.id}`} transitionTypes={["nav-forward"]}><Icon name="play" />Ver temporadas</IntentLink>
         <a className="btn btn-glass btn-lg" href="#biblioteca">Todas las series</a>
       </>
     ),
@@ -38,7 +37,7 @@ export default async function SeriesCatalogPage() {
     description: item.metadata?.overview,
     id: item.id,
     kicker: "Serie destacada",
-    media: <Backdrop path={item.metadata?.backdrop_path} title={item.title} />,
+    media: <Backdrop morphId={item.id} path={item.metadata?.backdrop_path} title={item.title} />,
     title: item.title,
   }));
 

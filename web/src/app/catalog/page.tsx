@@ -92,7 +92,7 @@ export default async function CatalogPage({ forceCourses = false, searchParams }
   const slides: SpotlightSlide[] = featured.map((course, index) => ({
     actions: (
       <>
-        {course.destinationId ? <Link className="btn btn-primary btn-lg" href={`/course-player?lesson=${course.destinationId}`}><Icon name="play" />{courseAction(course)}</Link> : null}
+        {course.destinationId ? <Link className="btn btn-primary btn-lg" href={`/course-player?lesson=${course.destinationId}`} transitionTypes={["nav-forward"]}><Icon name="play" />{courseAction(course)}</Link> : null}
         <a className="btn btn-glass btn-lg" href="#biblioteca">Explorar cursos</a>
       </>
     ),

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { type CSSProperties, ViewTransition } from "react";
 
 import { Icon } from "@/components/icons";
+import { IntentLink } from "@/components/intent-link";
 
 export type LibraryModule = "courses" | "movies" | "series";
 
@@ -60,15 +60,21 @@ export function MediaPoster({ eager = false, posterPath, sizes = "(max-width: 64
   return <img alt={`Portada de ${title}`} decoding="async" fetchPriority={eager ? "high" : "auto"} height={513} loading={eager ? "eager" : "lazy"} sizes={sizes} src={tmdbImage(posterPath, "w342")!} srcSet={posterSrcSet(posterPath)} width={342} />;
 }
 
-export function Backdrop({ path, title }: { path: string | null | undefined; title: string }) {
+/**
+ * Fondo de una película o serie. Con `morphId`, el mismo fondo se reconoce en el
+ * banner del catálogo, en la ficha y en el reproductor, y el navegador lo
+ * transforma de uno a otro al navegar (mismo `morphId` = mismo elemento).
+ */
+export function Backdrop({ morphId, path, title }: { morphId?: string; path: string | null | undefined; title: string }) {
   if (!path) return null;
-  return <img alt="" aria-label={`Escena de ${title}`} decoding="async" fetchPriority="high" sizes="100vw" src={tmdbImage(path, "w1280")!} srcSet={backdropSrcSet(path)} />;
+  const image = <img alt="" aria-label={`Escena de ${title}`} decoding="async" fetchPriority="high" sizes="100vw" src={tmdbImage(path, "w1280")!} srcSet={backdropSrcSet(path)} />;
+  return morphId ? <ViewTransition default="none" name={`backdrop-${morphId}`} share="nb-morph">{image}</ViewTransition> : image;
 }
 /* eslint-enable @next/next/no-img-element */
 
 export function PosterCard({ href, id, index = 0, metadata, title }: { href: string; id: string; index?: number; metadata?: TmdbCatalogMetadata; title: string }) {
   return (
-    <Link className="poster-card" href={href} style={{ "--i": index } as CSSProperties}>
+    <IntentLink className="poster-card" dwellPrefetch href={href} style={{ "--i": index } as CSSProperties} transitionTypes={["nav-forward"]}>
       <ViewTransition default="none" name={`poster-${id}`} share="nb-morph">
         <div className="poster-frame" data-spotlight="" data-tilt="9">
           <MediaPoster posterPath={metadata?.poster_path ?? null} title={title} />
@@ -82,7 +88,7 @@ export function PosterCard({ href, id, index = 0, metadata, title }: { href: str
         <strong>{title}</strong>
         <span>{[yearOf(metadata), metadata?.genres[0]?.name].filter(Boolean).join(" · ") || "—"}</span>
       </div>
-    </Link>
+    </IntentLink>
   );
 }
 

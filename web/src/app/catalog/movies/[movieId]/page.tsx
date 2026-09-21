@@ -32,13 +32,13 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ mo
       <SiteHeader tone="media" />
       <main className="shell-main">
         <section className="detail-hero">
-          <div className="detail-backdrop"><Backdrop path={metadata?.backdrop_path ?? metadata?.poster_path} title={title} /></div>
+          <div className="detail-backdrop"><Backdrop morphId={movie.id} path={metadata?.backdrop_path ?? metadata?.poster_path} title={title} /></div>
           <div className="detail-hero-inner container">
             <ViewTransition default="none" name={`poster-${movie.id}`} share="nb-morph">
               <div className="detail-poster"><MediaPoster eager posterPath={metadata?.poster_path ?? null} sizes="300px" title={title} /></div>
             </ViewTransition>
             <div className="detail-copy">
-              <Link className="back-link" href="/catalog/movies"><Icon name="arrowLeft" />Películas</Link>
+              <Link className="back-link" href="/catalog/movies" prefetch transitionTypes={["nav-back"]}><Icon name="arrowLeft" />Películas</Link>
               <h1 className="display">{title}</h1>
               <div className="detail-meta">
                 {year ? <span className="badge">{year}</span> : null}
@@ -48,7 +48,7 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ mo
               <p className="detail-overview">{metadata?.overview ?? "Sin sinopsis disponible."}</p>
               <div className="detail-actions">
                 {packageResult.data ? (
-                  <Link className="btn btn-primary btn-lg" href={`/media-player?package=${packageResult.data.id}`}><Icon name="play" />Reproducir</Link>
+                  <Link className="btn btn-primary btn-lg" href={`/media-player?package=${packageResult.data.id}`} prefetch transitionTypes={["nav-forward"]}><Icon name="play" />Reproducir</Link>
                 ) : (
                   <span className="btn btn-glass btn-lg" aria-disabled="true"><Icon name="info" />Aún no está lista para reproducir</span>
                 )}

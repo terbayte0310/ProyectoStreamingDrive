@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Brand } from "@/components/brand";
 import { Icon, type IconName } from "@/components/icons";
+import { IntentLink } from "@/components/intent-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { completeSignOut } from "@/lib/auth/sign-out-client";
 
@@ -53,15 +54,20 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
     const nav = navRef.current;
     const thumb = thumbRef.current;
     if (!nav || !thumb) return;
-    const place = () => {
+    // Al montar la cabecera (cada página trae la suya) la píldora se coloca al
+    // instante: así el navegador la ve ya en su sitio y la desliza desde la
+    // pestaña anterior con la transición de vista, en vez de crecer desde cero.
+    const place = (animate: boolean) => {
       const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
       if (!active) { delete thumb.dataset.ready; return; }
+      if (!animate) thumb.style.transition = "none";
       thumb.style.width = `${active.offsetWidth}px`;
       thumb.style.transform = `translateX(${active.offsetLeft}px)`;
       thumb.dataset.ready = "";
+      if (!animate) { void thumb.offsetWidth; thumb.style.removeProperty("transition"); }
     };
-    place();
-    const observer = new ResizeObserver(place);
+    place(false);
+    const observer = new ResizeObserver(() => place(true));
     observer.observe(nav);
     return () => observer.disconnect();
   }, [pathname]);
@@ -83,10 +89,10 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
             {items.map((item) => {
               const current = item.match(pathname);
               return (
-                <Link aria-current={current ? "page" : undefined} className="nav-link" href={item.href} key={item.href}>
+                <IntentLink aria-current={current ? "page" : undefined} className="nav-link" href={item.href} key={item.href}>
                   <Icon name={item.icon} />
                   {item.label}
-                </Link>
+                </IntentLink>
               );
             })}
           </nav>
@@ -118,10 +124,10 @@ export function AppHeader({ admin = false, email, modules = [], tone = "default"
 
       <nav aria-label="Navegación inferior" className="tabbar">
         {items.map((item) => (
-          <Link aria-current={item.match(pathname) ? "page" : undefined} className="tab-link" href={item.href} key={item.href}>
+          <IntentLink aria-current={item.match(pathname) ? "page" : undefined} className="tab-link" href={item.href} key={item.href}>
             <Icon name={item.icon} />
             {item.label}
-          </Link>
+          </IntentLink>
         ))}
         <Link aria-current={accountActive ? "page" : undefined} className="tab-link" href="/dashboard">
           <Icon name="user" />

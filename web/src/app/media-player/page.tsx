@@ -38,6 +38,7 @@ export default async function MediaPlayerPage({ searchParams }: { searchParams: 
           <MediaHlsPlayer
             backHref={`/catalog/movies/${packageRow.movie_id}`}
             backdrop={tmdbImage(metadata?.backdrop_path ?? metadata?.poster_path, "w1280")}
+            backdropMorphId={packageRow.movie_id}
             module="movies"
             packageId={packageRow.id}
             subtitle="Película"
@@ -82,6 +83,7 @@ export default async function MediaPlayerPage({ searchParams }: { searchParams: 
         <MediaHlsPlayer
           backHref={`/catalog/series/${season.series_id}`}
           backdrop={tmdbImage(episodeMetadata?.backdrop_path ?? seriesMetadataResult.data?.backdrop_path ?? seriesMetadataResult.data?.poster_path, "w1280")}
+          backdropMorphId={season.series_id}
           module="series"
           next={nextEpisode ? { packageId: packageByEpisode.get(nextEpisode.id)!, title: `${code(nextEpisode)} · ${nextEpisode.admin_title}` } : null}
           packageId={packageRow.id}

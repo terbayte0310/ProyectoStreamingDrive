@@ -48,6 +48,7 @@ function languageLabel(name: string | undefined, lang: string | undefined, index
 type Props = {
   backHref: string;
   backdrop?: string | null;
+  backdropMorphId?: string;
   badges?: string[];
   module: "movies" | "series";
   next?: { packageId: string; title: string } | null;
@@ -56,7 +57,7 @@ type Props = {
   title?: string;
 };
 
-export function MediaHlsPlayer({ backHref, backdrop, badges, module, next, packageId, subtitle, title = "Tu próxima historia" }: Props) {
+export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, module, next, packageId, subtitle, title = "Tu próxima historia" }: Props) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -233,7 +234,7 @@ export function MediaHlsPlayer({ backHref, backdrop, badges, module, next, packa
     };
   }, [packageId, playerKey]);
 
-  const playNext = useCallback(() => { if (next) router.push(`/media-player?package=${next.packageId}`); }, [next, router]);
+  const playNext = useCallback(() => { if (next) router.push(`/media-player?package=${next.packageId}`, { transitionTypes: ["nav-forward"] }); }, [next, router]);
 
   return (
     <NebulaPlayer
@@ -241,6 +242,7 @@ export function MediaHlsPlayer({ backHref, backdrop, badges, module, next, packa
       autoPlay
       backHref={backHref}
       backdrop={backdrop}
+      backdropMorphId={backdropMorphId}
       badges={badges}
       captionDelay={{ onChange: (value) => { subtitleDelayRef.current = value; setSubtitleDelay(value); const video = videoRef.current; if (video) shiftSubtitleCues(video.textTracks, value, originalCueTimesRef.current); }, value: subtitleDelay }}
       captions={{ onChange: (value) => { if (hlsRef.current) { hlsRef.current.subtitleTrack = value; hlsRef.current.subtitleDisplay = value >= 0; } setSubtitle(value); }, options: subtitles, value: subtitle_ }}

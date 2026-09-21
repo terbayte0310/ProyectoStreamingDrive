@@ -52,7 +52,7 @@ export function CourseCard({ course }: { course: CourseView }) {
           {course.percent > 0 ? <span aria-label={`${course.percent}% completado`} className="meter" role="img"><span style={{ width: `${course.percent}%` }} /></span> : null}
         </div>
       </div>
-      {course.destinationId ? <Link aria-label={`${courseAction(course)} ${title}`} className="course-card-link" href={`/course-player?lesson=${course.destinationId}`} /> : null}
+      {course.destinationId ? <Link aria-label={`${courseAction(course)} ${title}`} className="course-card-link" href={`/course-player?lesson=${course.destinationId}`} transitionTypes={["nav-forward"]} /> : null}
     </article>
   );
 }

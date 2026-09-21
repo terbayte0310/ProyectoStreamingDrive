@@ -41,7 +41,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <DriveWorkerWarmup />
         <SessionSignOutCoordinator />
         <InteractionLayer />
-        <ViewTransition default="nb-page">
+        {/* Sin tipo, la página se funde (nb-page). Con transitionTypes en el enlace, desliza según la dirección. */}
+        <ViewTransition default="nb-page" update={{ "nav-back": "nb-back", "nav-forward": "nb-forward", default: "nb-page" }}>
           <div className="app-root">{children}</div>
         </ViewTransition>
         <TransferUsageNotice />

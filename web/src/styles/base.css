@@ -343,6 +343,28 @@ kbd, .kbd {
 ::view-transition-new(.nb-page) { animation: page-in 380ms var(--ease-out) both; }
 @keyframes page-out { to { opacity: 0; transform: translateY(-6px); filter: blur(4px); } }
 @keyframes page-in { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } }
+/* Deslizamiento con dirección: hacia delante la página entra por la derecha, hacia atrás por la izquierda. */
+::view-transition-old(.nb-forward) { --nb-shift: -44px; animation: nb-fade 190ms var(--ease-in-out) reverse both, nb-slide 420ms var(--ease-in-out) reverse both; }
+::view-transition-new(.nb-forward) { --nb-shift: 44px; animation: nb-fade 320ms var(--ease-out) 110ms both, nb-slide 460ms var(--ease-out) both; }
+::view-transition-old(.nb-back) { --nb-shift: 44px; animation: nb-fade 190ms var(--ease-in-out) reverse both, nb-slide 420ms var(--ease-in-out) reverse both; }
+::view-transition-new(.nb-back) { --nb-shift: -44px; animation: nb-fade 320ms var(--ease-out) 110ms both, nb-slide 460ms var(--ease-out) both; }
+@keyframes nb-fade { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: blur(0); } }
+@keyframes nb-slide { from { translate: var(--nb-shift); } to { translate: 0; } }
+/* Los clics no se pierden mientras dura la animación. */
+::view-transition { pointer-events: none; }
+/* La cabecera es el punto fijo: no se desliza; solo la píldora activa se desplaza entre pestañas. */
+::view-transition-group(site-header) { animation: none; z-index: 100; }
+::view-transition-old(site-header) { display: none; }
+::view-transition-new(site-header) { animation: none; }
+/* La píldora va POR DEBAJO de la cabecera (z-index 100): si no, taparía el texto de la pestaña activa. */
+::view-transition-group(nav-thumb) { z-index: 99; animation-duration: 420ms; animation-timing-function: var(--ease-out); }
+::view-transition-image-pair(nav-thumb) { isolation: auto; }
+::view-transition-old(nav-thumb), ::view-transition-new(nav-thumb) { animation: none; mix-blend-mode: normal; height: 100%; }
+/* Sin pareja (la página de destino no tiene cabecera, como el reproductor): se desvanece en vez de quedarse flotando. */
+::view-transition-old(nav-thumb):only-child, ::view-transition-old(site-header):only-child { display: block; animation: nb-leave 200ms var(--ease-in-out) both; }
+::view-transition-new(nav-thumb):only-child { animation: nb-arrive 300ms var(--ease-out) both; }
+@keyframes nb-leave { to { opacity: 0; } }
+@keyframes nb-arrive { from { opacity: 0; } }
 ::view-transition-group(.nb-morph) { animation-duration: 460ms; animation-timing-function: var(--ease-out); }
 ::view-transition-image-pair(.nb-morph) { animation-name: via-blur; }
 @keyframes via-blur { 35% { filter: blur(4px); } }

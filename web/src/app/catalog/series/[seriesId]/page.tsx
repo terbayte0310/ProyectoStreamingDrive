@@ -75,13 +75,13 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
       <SiteHeader tone="media" />
       <main className="shell-main">
         <section className="detail-hero">
-          <div className="detail-backdrop"><Backdrop path={metadata?.backdrop_path ?? metadata?.poster_path} title={title} /></div>
+          <div className="detail-backdrop"><Backdrop morphId={series.id} path={metadata?.backdrop_path ?? metadata?.poster_path} title={title} /></div>
           <div className="detail-hero-inner container">
             <ViewTransition default="none" name={`poster-${series.id}`} share="nb-morph">
               <div className="detail-poster"><MediaPoster eager posterPath={metadata?.poster_path ?? null} sizes="300px" title={title} /></div>
             </ViewTransition>
             <div className="detail-copy">
-              <Link className="back-link" href="/catalog/series"><Icon name="arrowLeft" />Series</Link>
+              <Link className="back-link" href="/catalog/series" prefetch transitionTypes={["nav-back"]}><Icon name="arrowLeft" />Series</Link>
               <h1 className="display">{title}</h1>
               <div className="detail-meta">
                 {year ? <span className="badge">{year}</span> : null}

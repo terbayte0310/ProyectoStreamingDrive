@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { Icon } from "@/components/icons";
+import { IntentLink } from "@/components/intent-link";
 import { tmdbImage } from "@/components/media-catalog";
 import { isFinished, type LocalProgress, progressRatio, readLocalProgress } from "@/lib/media/local-progress";
 
@@ -51,7 +52,7 @@ export function SeriesPlayButton({ seasons }: { seasons: SeasonView[] }) {
 
   if (!target) return <span aria-disabled="true" className="btn btn-glass btn-lg"><Icon name="info" />Aún no hay episodios listos</span>;
   return (
-    <Link className="btn btn-primary btn-lg" href={`/media-player?package=${target.episode.packageId}`}>
+    <Link className="btn btn-primary btn-lg" href={`/media-player?package=${target.episode.packageId}`} prefetch transitionTypes={["nav-forward"]}>
       <Icon name="play" />{target.label} {episodeCode(target.season, target.episode)}
     </Link>
   );
@@ -104,7 +105,7 @@ export function SeasonBrowser({ seasons }: { seasons: SeasonView[] }) {
               {episode.packageId ? (
                 <>
                   <span aria-hidden="true" className="episode-play"><Icon name="play" /></span>
-                  <Link aria-label={`Reproducir ${episodeCode(season, episode)}: ${episode.title}`} className="episode-link" href={`/media-player?package=${episode.packageId}`} />
+                  <IntentLink aria-label={`Reproducir ${episodeCode(season, episode)}: ${episode.title}`} className="episode-link" dwellPrefetch href={`/media-player?package=${episode.packageId}`} transitionTypes={["nav-forward"]} />
                 </>
               ) : null}
             </li>

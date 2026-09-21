@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import { CatalogCollection } from "@/components/catalog-collection";
 import { Icon } from "@/components/icons";
+import { IntentLink } from "@/components/intent-link";
 import { Backdrop, metadataSummary, PosterCard, type TmdbCatalogMetadata, TmdbAttribution } from "@/components/media-catalog";
 import { SiteHeader } from "@/components/site-header";
 import { Spotlight, type SpotlightSlide } from "@/components/spotlight";
@@ -31,7 +30,7 @@ export default async function MoviesCatalogPage() {
   const slides: SpotlightSlide[] = movies.filter((movie) => movie.metadata?.backdrop_path).slice(-5).reverse().map((movie) => ({
     actions: (
       <>
-        <Link className="btn btn-primary btn-lg" href={`/catalog/movies/${movie.id}`}><Icon name="play" />Ver ahora</Link>
+        <IntentLink className="btn btn-primary btn-lg" href={`/catalog/movies/${movie.id}`} transitionTypes={["nav-forward"]}><Icon name="play" />Ver ahora</IntentLink>
         <a className="btn btn-glass btn-lg" href="#biblioteca">Todas las películas</a>
       </>
     ),
@@ -39,7 +38,7 @@ export default async function MoviesCatalogPage() {
     description: movie.metadata?.overview,
     id: movie.id,
     kicker: "Película destacada",
-    media: <Backdrop path={movie.metadata?.backdrop_path} title={movie.title} />,
+    media: <Backdrop morphId={movie.id} path={movie.metadata?.backdrop_path} title={movie.title} />,
     title: movie.title,
   }));
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject, type VideoHTMLAttributes, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject, type VideoHTMLAttributes, ViewTransition, useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon, type IconName } from "@/components/icons";
 import { clampPlaybackTime, formatPlayerTime } from "@/lib/media/player-time";
@@ -19,6 +19,8 @@ type Props = Omit<VideoHTMLAttributes<HTMLVideoElement>, "controls" | "poster" |
   audio?: TrackGroup;
   backHref?: string;
   backdrop?: string | null;
+  /** Mismo identificador que el fondo de la ficha: el navegador lo transforma de uno a otro. */
+  backdropMorphId?: string;
   badges?: string[];
   captionDelay?: { onChange: (seconds: number) => void; value: number };
   captions?: TrackGroup;
@@ -53,12 +55,19 @@ const shortcuts: Array<[string, string]> = [
   ["Mayús + N / P", "Siguiente / anterior"], ["?", "Mostrar atajos"],
 ];
 
+/* eslint-disable @next/next/no-img-element -- fondo decorativo mientras carga. */
+function PosterImage({ morphId, src }: { morphId?: string; src: string }) {
+  const image = <img alt="" className="np-poster" src={src} />;
+  return morphId ? <ViewTransition default="none" name={`backdrop-${morphId}`} share="nb-morph">{image}</ViewTransition> : image;
+}
+/* eslint-enable @next/next/no-img-element */
+
 /**
  * Reproductor de presentación. Quien lo usa conserva la autorización de la
  * fuente, HLS y la persistencia del progreso; aquí vive toda la experiencia.
  */
 export function NebulaPlayer(props: Props) {
-  const { audio, backHref, backdrop, badges, captionDelay, captions, error, nextLabel, onNext, onPrevious, onReauthorize, onRetry, onTheaterChange, previousLabel, quality, resumeAt, stage, status, subtitle, theater, title, upNext, videoRef, ...videoProps } = props;
+  const { audio, backHref, backdrop, backdropMorphId, badges, captionDelay, captions, error, nextLabel, onNext, onPrevious, onReauthorize, onRetry, onTheaterChange, previousLabel, quality, resumeAt, stage, status, subtitle, theater, title, upNext, videoRef, ...videoProps } = props;
   const shellRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
@@ -485,13 +494,12 @@ export function NebulaPlayer(props: Props) {
         <button className="btn btn-glass btn-sm np-native-return" onClick={() => setNativeControls(false)} type="button">Volver a controles Nébula</button>
       ) : (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element -- fondo decorativo mientras carga. */}
-          {backdrop ? <img alt="" className="np-poster" src={backdrop} /> : null}
+          {backdrop ? <PosterImage morphId={backdropMorphId} src={backdrop} /> : null}
           <div className="np-gesture" onClick={() => { if (pointerType.current === "mouse" && !menu) void togglePlay(); }} onDoubleClick={() => { if (pointerType.current === "mouse") void toggleFullscreen(); }} onPointerDown={(event) => { pointerType.current = event.pointerType; }} onPointerUp={onGesturePointerUp} />
           <div aria-hidden="true" className="np-scrim" />
 
           <div className="np-top">
-            {backHref ? <Link aria-label="Volver" className="np-back" href={backHref}><Icon name="arrowLeft" /></Link> : null}
+            {backHref ? <Link aria-label="Volver" className="np-back" href={backHref} prefetch transitionTypes={["nav-back"]}><Icon name="arrowLeft" /></Link> : null}
             <div className="np-titles">
               {subtitle ? <span>{subtitle}</span> : null}
               <strong>{title}</strong>
@@ -553,7 +561,7 @@ export function NebulaPlayer(props: Props) {
               <p>{errorMessage || "Algo interrumpió la reproducción."}</p>
               <div className="np-overlay-actions">
                 <button className="btn btn-light" onClick={() => { setVideoError(""); if (onRetry) onRetry(); else videoRef.current?.load(); }} type="button"><Icon name="refresh" />Reintentar</button>
-                {backHref ? <Link className="btn btn-glass" href={backHref}>Volver</Link> : null}
+                {backHref ? <Link className="btn btn-glass" href={backHref} prefetch transitionTypes={["nav-back"]}>Volver</Link> : null}
               </div>
             </div>
           ) : null}
