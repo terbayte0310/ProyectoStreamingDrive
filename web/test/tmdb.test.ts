@@ -32,6 +32,18 @@ test("TMDB metadata normalizes useful fields while retaining the provider payloa
   assert.equal(metadata.raw_payload, payload);
 });
 
+test("TMDB episode still_path is retained as the episode artwork", () => {
+  const metadata = mapTmdbMetadata("episode", {
+    air_date: "2026-01-18",
+    id: 9001,
+    name: "El caballero errante",
+    overview: "Dunk conoce a Egg.",
+    still_path: "/episode-still.jpg",
+  }, { episodeNumber: 1, parentId: 100, seasonNumber: 1 });
+  assert.equal(metadata.backdrop_path, "/episode-still.jpg");
+  assert.equal(metadata.poster_path, null);
+  assert.equal(metadata.tmdb_url, "https://www.themoviedb.org/tv/100/season/1/episode/1");
+});
 test("TMDB canonical URLs preserve series hierarchy for seasons and episodes", () => {
   assert.equal(buildTmdbUrl("season", 101, { parentId: 1399, seasonNumber: 1 }), "https://www.themoviedb.org/tv/1399/season/1");
   assert.equal(buildTmdbUrl("episode", 102, { episodeNumber: 2, parentId: 1399, seasonNumber: 1 }), "https://www.themoviedb.org/tv/1399/season/1/episode/2");

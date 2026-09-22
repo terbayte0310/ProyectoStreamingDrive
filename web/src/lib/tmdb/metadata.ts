@@ -88,7 +88,7 @@ export function mapTmdbMetadata(
   const localizedTitle = asNonEmptyString(payload.title) ?? asNonEmptyString(payload.name);
   const originalTitle = asNonEmptyString(payload.original_title) ?? asNonEmptyString(payload.original_name);
   return {
-    backdrop_path: asNonEmptyString(payload.backdrop_path),
+    backdrop_path: asNonEmptyString(payload.backdrop_path) ?? (kind === "episode" ? asNonEmptyString(payload.still_path) : null),
     genres: asGenres(payload.genres),
     localized_title: localizedTitle,
     original_title: originalTitle,

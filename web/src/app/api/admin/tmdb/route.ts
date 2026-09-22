@@ -197,8 +197,8 @@ export async function POST(request: NextRequest) {
         },
         { onConflict: relationColumn },
       )
-      .select("id, tmdb_id, tmdb_url, synced_at")
-      .maybeSingle<{ id: string; synced_at: string; tmdb_id: number; tmdb_url: string }>();
+      .select("id, tmdb_id, tmdb_url, synced_at, poster_path, backdrop_path, localized_title, overview")
+      .maybeSingle<{ backdrop_path: string | null; id: string; localized_title: string | null; overview: string | null; poster_path: string | null; synced_at: string; tmdb_id: number; tmdb_url: string }>();
     if (error || !data) return noStoreJson({ error: "No se pudo guardar la caché de TMDB." }, { status: 500 });
     return noStoreJson({ metadata: data }, { status: body.action === "link" ? 201 : 200 });
   } catch (error) {

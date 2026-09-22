@@ -251,6 +251,7 @@ export function AdminMediaManager({ initialMetadata, initialMovies, initialSerie
           ) : null}
 
           <TmdbPanel
+            episodes={selection.kind === "series" ? episodes : []}
             kind={selection.kind}
             metadata={currentMetadata}
             onChanged={async () => { router.refresh(); if (selection.kind !== "movie" && activeSeriesId) await loadSeries(activeSeriesId); }}
@@ -351,11 +352,13 @@ function GeneralForm({ isParentDraft, kind, onSaved, record }: { isParentDraft: 
   );
 }
 
-function TmdbPanel({ kind, metadata, onChanged, selectionId }: { kind: MediaKind; metadata: TmdbMetadata | null; onChanged: () => Promise<void>; selectionId: string }) {
+function TmdbPanel({ episodes = [], kind, metadata, onChanged, selectionId }: { episodes?: AdminMediaRecord[]; kind: MediaKind; metadata: TmdbMetadata | null; onChanged: () => Promise<void>; selectionId: string }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<TmdbSearchResult[] | null>(null);
   const [busy, setBusy] = useState("");
+  const [episodeProgress, setEpisodeProgress] = useState<{ done: number; total: number } | null>(null);
   const canSearch = kind === "movie" || kind === "series";
+  const displayPoster = metadata?.poster_path ?? (kind === "episode" ? metadata?.backdrop_path : null);
 
   async function runSearch(event: FormEvent) {
     event.preventDefault();
@@ -388,6 +391,35 @@ function TmdbPanel({ kind, metadata, onChanged, selectionId }: { kind: MediaKind
     }
   }
 
+  async function syncEpisodes() {
+    if (!metadata?.tmdb_id || !episodes.length) return;
+    setBusy("episodes");
+    setEpisodeProgress({ done: 0, total: episodes.length });
+    let synced = 0;
+    let withoutImage = 0;
+    const errors: string[] = [];
+    try {
+      for (let index = 0; index < episodes.length; index += 1) {
+        const episode = episodes[index];
+        try {
+          const result = await postJson<{ metadata?: { backdrop_path: string | null; poster_path: string | null } }>("/api/admin/tmdb", {
+            action: "link", contentId: episode.id, contentKind: "episode",
+          });
+          synced += 1;
+          if (!result.metadata?.backdrop_path && !result.metadata?.poster_path) withoutImage += 1;
+        } catch (error) {
+          errors.push(episode.internal_code + ": " + (error instanceof Error ? error.message : "error desconocido"));
+        }
+        setEpisodeProgress({ done: index + 1, total: episodes.length });
+      }
+      await onChanged();
+      const summary = synced + "/" + episodes.length + " episodios sincronizados" + (withoutImage ? "; " + withoutImage + " sin imagen en TMDB" : "") + (errors.length ? "; " + errors.length + " con error" : "") + ".";
+      toast(errors.length ? summary + " Primer error: " + errors[0] : summary, errors.length ? "warn" : "success", 12_000);
+    } finally {
+      setBusy("");
+      setEpisodeProgress(null);
+    }
+  }
   return (
     <section className="panel panel-pad">
       <div className="panel-head">
@@ -397,7 +429,7 @@ function TmdbPanel({ kind, metadata, onChanged, selectionId }: { kind: MediaKind
       {metadata ? (
         <div className="tmdb-card">
           {/* eslint-disable-next-line @next/next/no-img-element -- CDN de TMDB. */}
-          {metadata.poster_path ? <img alt="" src={tmdbImage(metadata.poster_path, "w185")!} /> : <div className="poster-fallback" style={{ width: 110, aspectRatio: "2 / 3", borderRadius: 12 }}>{metadata.localized_title}</div>}
+          {displayPoster ? <img alt="" src={tmdbImage(displayPoster, "w185")!} /> : <div className="poster-fallback" style={{ width: 110, aspectRatio: "2 / 3", borderRadius: 12 }}>{metadata.localized_title}</div>}
           <div>
             <strong className="title-s">{metadata.localized_title ?? metadata.original_title}</strong>
             <p>{metadata.overview || "Sin sinopsis disponible."}</p>
@@ -433,6 +465,14 @@ function TmdbPanel({ kind, metadata, onChanged, selectionId }: { kind: MediaKind
         {metadata ? <button className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => void act("refresh")} type="button"><Icon name="refresh" />{busy === "refresh" ? "Actualizando…" : "Refrescar"}</button> : null}
         {metadata ? <button className="btn btn-danger btn-sm" disabled={Boolean(busy)} onClick={() => void act("unlink")} type="button"><Icon name="trash" />Desvincular</button> : null}
       </div>
+      {kind === "series" && metadata?.tmdb_id ? (
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          <button className="btn btn-ghost btn-sm" disabled={Boolean(busy) || !episodes.length} onClick={() => void syncEpisodes()} type="button">
+            <Icon name="refresh" />{busy === "episodes" ? "Sincronizando episodios " + (episodeProgress?.done ?? 0) + "/" + (episodeProgress?.total ?? episodes.length) + "…" : "Sincronizar episodios TMDB (" + episodes.length + ")"}
+          </button>
+          {episodeProgress ? <div className="progress-block" role="status"><span className="meter"><span style={{ width: Math.round(episodeProgress.done / episodeProgress.total * 100) + "%" }} /></span><div className="progress-meta"><span>Metadatos, sinopsis e imágenes</span><span className="mono">{episodeProgress.done}/{episodeProgress.total}</span></div></div> : null}
+        </div>
+      ) : null}
       <p className="field-hint" style={{ marginTop: 14 }}>Datos e imágenes proporcionados por TMDB. Esta aplicación no está respaldada ni certificada por TMDB.</p>
     </section>
   );
