@@ -7,6 +7,7 @@ import { SegmentedThumb } from "@/components/catalog-collection";
 import { Icon } from "@/components/icons";
 import { MediaPoster, tmdbImage } from "@/components/media-catalog";
 import { MediaInventoryImport } from "@/components/media-inventory-import";
+import { mapEpisodeOrdinalToTmdb } from "@/lib/tmdb/episode-mapping";
 import { PublishReadyMedia } from "@/components/publish-ready-media";
 import { toast } from "@/components/toaster";
 import { AdminTabs } from "@/components/ui/admin-tabs";
@@ -19,7 +20,7 @@ export type AdminMediaRecord = { admin_code: string | null; admin_title: string;
 export type TmdbMetadata = {
   backdrop_path: string | null; episode_id: string | null; genres: Array<{ id: number; name: string }>; id: string; localized_title: string | null; movie_id?: string | null;
   original_title: string | null; overview: string | null; poster_path: string | null; release_date: string | null; runtime_minutes: number | null; season_id: string | null;
-  series_id: string | null; synced_at: string | null; tmdb_id: number | null; tmdb_url: string | null; vote_average: number | null; vote_count: number | null;
+  raw_payload?: Record<string, unknown> | null; series_id: string | null; synced_at: string | null; tmdb_id: number | null; tmdb_url: string | null; vote_average: number | null; vote_count: number | null;
 };
 
 type Selection = { id: string; kind: MediaKind } | null;
@@ -253,6 +254,7 @@ export function AdminMediaManager({ initialMetadata, initialMovies, initialSerie
           <TmdbPanel
             episodes={selection.kind === "series" ? episodes : []}
             kind={selection.kind}
+            seasons={selection.kind === "series" ? seasons : []}
             metadata={currentMetadata}
             onChanged={async () => { router.refresh(); if (selection.kind !== "movie" && activeSeriesId) await loadSeries(activeSeriesId); }}
             selectionId={selection.id}
@@ -352,7 +354,7 @@ function GeneralForm({ isParentDraft, kind, onSaved, record }: { isParentDraft: 
   );
 }
 
-function TmdbPanel({ episodes = [], kind, metadata, onChanged, selectionId }: { episodes?: AdminMediaRecord[]; kind: MediaKind; metadata: TmdbMetadata | null; onChanged: () => Promise<void>; selectionId: string }) {
+function TmdbPanel({ episodes = [], kind, metadata, onChanged, seasons = [], selectionId }: { episodes?: AdminMediaRecord[]; kind: MediaKind; metadata: TmdbMetadata | null; onChanged: () => Promise<void>; seasons?: AdminMediaRecord[]; selectionId: string }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<TmdbSearchResult[] | null>(null);
   const [busy, setBusy] = useState("");
@@ -393,27 +395,62 @@ function TmdbPanel({ episodes = [], kind, metadata, onChanged, selectionId }: { 
 
   async function syncEpisodes() {
     if (!metadata?.tmdb_id || !episodes.length) return;
+    const rawSeasons = metadata.raw_payload?.seasons;
+    if (!Array.isArray(rawSeasons)) {
+      toast("No encuentro el mapa de temporadas TMDB. Refresca primero los metadatos de la serie.", "error");
+      return;
+    }
+    const tmdbSeasons = rawSeasons.flatMap((value) => {
+      if (!value || typeof value !== "object") return [];
+      const season = value as Record<string, unknown>;
+      return typeof season.season_number === "number" && typeof season.episode_count === "number"
+        ? [{ season_number: season.season_number, episode_count: season.episode_count }]
+        : [];
+    });
+    const localSeasonNumbers = new Map(seasons.map((season) => [season.id, season.season_number ?? 0]));
+    const orderedEpisodes = [...episodes].sort((left, right) =>
+      (localSeasonNumbers.get(left.season_id ?? "") ?? 0) - (localSeasonNumbers.get(right.season_id ?? "") ?? 0)
+      || (left.episode_number ?? 0) - (right.episode_number ?? 0));
+    let regularOrdinal = 0;
+    const mappedEpisodes = orderedEpisodes.map((episode) => {
+      const localSeason = localSeasonNumbers.get(episode.season_id ?? "") ?? 0;
+      if (localSeason === 0) {
+        return { episode, coordinates: { seasonNumber: 0, episodeNumber: episode.episode_number ?? 0 } };
+      }
+      regularOrdinal += 1;
+      return { episode, coordinates: mapEpisodeOrdinalToTmdb(regularOrdinal, tmdbSeasons) };
+    });
+
     setBusy("episodes");
-    setEpisodeProgress({ done: 0, total: episodes.length });
+    setEpisodeProgress({ done: 0, total: mappedEpisodes.length });
     let synced = 0;
     let withoutImage = 0;
     const errors: string[] = [];
     try {
-      for (let index = 0; index < episodes.length; index += 1) {
-        const episode = episodes[index];
-        try {
-          const result = await postJson<{ metadata?: { backdrop_path: string | null; poster_path: string | null } }>("/api/admin/tmdb", {
-            action: "link", contentId: episode.id, contentKind: "episode",
-          });
-          synced += 1;
-          if (!result.metadata?.backdrop_path && !result.metadata?.poster_path) withoutImage += 1;
-        } catch (error) {
-          errors.push(episode.internal_code + ": " + (error instanceof Error ? error.message : "error desconocido"));
-        }
-        setEpisodeProgress({ done: index + 1, total: episodes.length });
+      for (let offset = 0; offset < mappedEpisodes.length; offset += 3) {
+        const batch = mappedEpisodes.slice(offset, offset + 3);
+        await Promise.all(batch.map(async ({ coordinates, episode }) => {
+          if (!coordinates) {
+            errors.push(episode.internal_code + ": no existe un episodio correspondiente en las temporadas TMDB.");
+            return;
+          }
+          try {
+            const result = await postJson<{ metadata?: { backdrop_path: string | null; poster_path: string | null } }>("/api/admin/tmdb", {
+              action: "link", contentId: episode.id, contentKind: "episode",
+              tmdbEpisodeNumber: coordinates.episodeNumber, tmdbSeasonNumber: coordinates.seasonNumber,
+            });
+            synced += 1;
+            if (!result.metadata?.backdrop_path && !result.metadata?.poster_path) withoutImage += 1;
+          } catch (error) {
+            errors.push(episode.internal_code + ": " + (error instanceof Error ? error.message : "error desconocido"));
+          }
+        }));
+        setEpisodeProgress({ done: Math.min(offset + batch.length, mappedEpisodes.length), total: mappedEpisodes.length });
       }
       await onChanged();
-      const summary = synced + "/" + episodes.length + " episodios sincronizados" + (withoutImage ? "; " + withoutImage + " sin imagen en TMDB" : "") + (errors.length ? "; " + errors.length + " con error" : "") + ".";
+      const summary = synced + "/" + mappedEpisodes.length + " episodios sincronizados"
+        + (withoutImage ? "; " + withoutImage + " sin imagen en TMDB" : "")
+        + (errors.length ? "; " + errors.length + " con error" : "") + ".";
       toast(errors.length ? summary + " Primer error: " + errors[0] : summary, errors.length ? "warn" : "success", 12_000);
     } finally {
       setBusy("");

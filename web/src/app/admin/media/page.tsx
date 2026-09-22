@@ -10,7 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Administrar películas y series" };
 
-const metadataColumns = "id, media_kind, movie_id, series_id, season_id, episode_id, tmdb_id, tmdb_url, localized_title, original_title, overview, poster_path, backdrop_path, release_date, runtime_minutes, genres, vote_average, vote_count, synced_at";
+const metadataColumns = "id, media_kind, movie_id, series_id, season_id, episode_id, tmdb_id, tmdb_url, localized_title, original_title, overview, poster_path, backdrop_path, release_date, runtime_minutes, genres, vote_average, vote_count, synced_at, raw_payload";
 
 export default async function AdminMediaPage() {
   const supabase = await createSupabaseServerClient();

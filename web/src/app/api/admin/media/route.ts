@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     : { data: [], error: null };
   if (episodesError) return noStoreJson({ error: "No se pudieron cargar los episodios." }, { status: 500 });
   const episodeIds = (episodes ?? []).map((episode) => episode.id);
-  const columns = "id, media_kind, series_id, season_id, episode_id, tmdb_id, tmdb_url, localized_title, original_title, overview, poster_path, backdrop_path, release_date, runtime_minutes, genres, vote_average, vote_count, synced_at";
+  const columns = "id, media_kind, series_id, season_id, episode_id, tmdb_id, tmdb_url, localized_title, original_title, overview, poster_path, backdrop_path, release_date, runtime_minutes, genres, vote_average, vote_count, synced_at, raw_payload";
   const { data: seriesMetadata, error: seriesMetadataError } = await supabase.from("media_tmdb_metadata").select(columns).eq("series_id", seriesId);
   const { data: seasonMetadata, error: seasonMetadataError } = seasonIds.length
     ? await supabase.from("media_tmdb_metadata").select(columns).in("season_id", seasonIds)

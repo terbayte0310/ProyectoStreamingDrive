@@ -9,7 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 type ContentKind = TmdbMediaKind;
-type RequestBody = { action?: unknown; contentId?: unknown; contentKind?: unknown; query?: unknown; tmdbId?: unknown };
+type RequestBody = { action?: unknown; contentId?: unknown; contentKind?: unknown; query?: unknown; tmdbEpisodeNumber?: unknown; tmdbId?: unknown; tmdbSeasonNumber?: unknown };
 type ContentContext = { episodeNumber?: number; parentTmdbId?: number; seasonNumber?: number };
 
 const contentTables: Record<ContentKind, string> = {
@@ -147,6 +147,16 @@ export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const context = await getContentContext(supabase, body.contentKind, body.contentId);
   if (!context) return noStoreJson({ error: "El contenido no existe o no está disponible para este administrador." }, { status: 404 });
+  const hasMappedEpisodeCoordinates = body.tmdbSeasonNumber !== undefined || body.tmdbEpisodeNumber !== undefined;
+  if (hasMappedEpisodeCoordinates) {
+    if (body.action !== "link" || body.contentKind !== "episode"
+      || typeof body.tmdbSeasonNumber !== "number" || !Number.isSafeInteger(body.tmdbSeasonNumber) || body.tmdbSeasonNumber < 0
+      || typeof body.tmdbEpisodeNumber !== "number" || !Number.isSafeInteger(body.tmdbEpisodeNumber) || body.tmdbEpisodeNumber < 1) {
+      return noStoreJson({ error: "El mapeo del episodio TMDB no es válido." }, { status: 400 });
+    }
+    context.seasonNumber = body.tmdbSeasonNumber;
+    context.episodeNumber = body.tmdbEpisodeNumber;
+  }
   const relationColumn = relationColumns[body.contentKind];
 
   if (body.action === "unlink") {

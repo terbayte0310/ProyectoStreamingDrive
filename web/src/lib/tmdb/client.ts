@@ -104,7 +104,7 @@ export async function fetchTmdbMetadata({
   if (kind === "movie" && tmdbId) pathname = `/movie/${tmdbId}`;
   else if (kind === "series" && tmdbId) pathname = `/tv/${tmdbId}`;
   else if (parentTmdbId && seasonNumber && kind === "season") pathname = `/tv/${parentTmdbId}/season/${seasonNumber}`;
-  else if (parentTmdbId && seasonNumber && episodeNumber && kind === "episode") pathname = `/tv/${parentTmdbId}/season/${seasonNumber}/episode/${episodeNumber}`;
+  else if (parentTmdbId && seasonNumber !== undefined && episodeNumber && kind === "episode") pathname = `/tv/${parentTmdbId}/season/${seasonNumber}/episode/${episodeNumber}`;
   else throw new Error("Falta la relación TMDB de la serie para consultar este contenido.");
 
   const result = await requestLocalizedDetails(pathname);

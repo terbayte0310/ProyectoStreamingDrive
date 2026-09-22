@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { buildTmdbUrl, mapTmdbMetadata } from "../src/lib/tmdb/metadata.ts";
+import { mapEpisodeOrdinalToTmdb } from "../src/lib/tmdb/episode-mapping.ts";
 
 const migration = readFileSync(new URL("../supabase/migrations/20260913040000_tmdb_metadata_cache.sql", import.meta.url), "utf8");
 const rollback = readFileSync(new URL("../supabase/rollbacks/20260913040000_tmdb_metadata_cache.rollback.sql", import.meta.url), "utf8");
@@ -44,9 +45,29 @@ test("TMDB episode still_path is retained as the episode artwork", () => {
   assert.equal(metadata.poster_path, null);
   assert.equal(metadata.tmdb_url, "https://www.themoviedb.org/tv/100/season/1/episode/1");
 });
+test("TMDB aggregate episode numbering crosses season boundaries and skips specials", () => {
+  const seasons = [
+    { season_number: 0, episode_count: 10 },
+    { season_number: 1, episode_count: 39 },
+    { season_number: 2, episode_count: 35 },
+    { season_number: 3, episode_count: 33 },
+    { season_number: 4, episode_count: 32 },
+    { season_number: 5, episode_count: 26 },
+    { season_number: 6, episode_count: 29 },
+    { season_number: 7, episode_count: 25 },
+    { season_number: 8, episode_count: 34 },
+    { season_number: 9, episode_count: 38 },
+  ];
+  assert.deepEqual(mapEpisodeOrdinalToTmdb(1, seasons), { seasonNumber: 1, episodeNumber: 1 });
+  assert.deepEqual(mapEpisodeOrdinalToTmdb(39, seasons), { seasonNumber: 1, episodeNumber: 39 });
+  assert.deepEqual(mapEpisodeOrdinalToTmdb(40, seasons), { seasonNumber: 2, episodeNumber: 1 });
+  assert.deepEqual(mapEpisodeOrdinalToTmdb(291, seasons), { seasonNumber: 9, episodeNumber: 38 });
+  assert.equal(mapEpisodeOrdinalToTmdb(292, seasons), null);
+});
 test("TMDB canonical URLs preserve series hierarchy for seasons and episodes", () => {
   assert.equal(buildTmdbUrl("season", 101, { parentId: 1399, seasonNumber: 1 }), "https://www.themoviedb.org/tv/1399/season/1");
   assert.equal(buildTmdbUrl("episode", 102, { episodeNumber: 2, parentId: 1399, seasonNumber: 1 }), "https://www.themoviedb.org/tv/1399/season/1/episode/2");
+  assert.equal(buildTmdbUrl("episode", 103, { episodeNumber: 1, parentId: 1399, seasonNumber: 0 }), "https://www.themoviedb.org/tv/1399/season/0/episode/1");
   assert.throws(() => buildTmdbUrl("episode", 102, { parentId: 1399, seasonNumber: 1 }));
 });
 

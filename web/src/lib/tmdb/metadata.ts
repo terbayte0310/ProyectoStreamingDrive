@@ -68,7 +68,7 @@ function runtimeFrom(payload: Record<string, unknown>) {
 export function buildTmdbUrl(kind: TmdbMediaKind, tmdbId: number, options: TmdbUrlOptions = {}) {
   if (kind === "movie") return `https://www.themoviedb.org/movie/${tmdbId}`;
   if (kind === "series") return `https://www.themoviedb.org/tv/${tmdbId}`;
-  if (!options.parentId || !options.seasonNumber) {
+  if (!options.parentId || options.seasonNumber === undefined) {
     throw new Error("Las temporadas y episodios requieren la serie y la temporada de TMDB.");
   }
   const seasonUrl = `https://www.themoviedb.org/tv/${options.parentId}/season/${options.seasonNumber}`;
