@@ -11,8 +11,10 @@ import { getDriveWorker, sendDriveToken, workerControlsPage } from "@/lib/media/
 import { readLocalProgress, resumePoint, writeLocalProgress } from "@/lib/media/local-progress";
 import { deviceSnapshot, flushPlayerEvents, reportPlayerEvent, takeUncleanMarker, writePlayerMarker } from "@/lib/media/player-telemetry";
 import { shiftSubtitleCues } from "@/lib/media/subtitle-time";
+import { loadSubtitleSource } from "@/lib/media/subtitle-source";
 
 const stageLabels = ["Verificando tu acceso", "Preparando el canal seguro", "Leyendo el índice del vídeo", "Cargando los primeros segundos"];
+const defaultSubtitleDelay = -1;
 
 // Pensado para conexiones lentas o inestables: arranca con una estimación
 // prudente, limita la calidad al tamaño real del reproductor y reintenta los
@@ -88,7 +90,7 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const originalCueTimesRef = useRef(new WeakMap<TextTrackCue, { endTime: number; startTime: number }>());
-  const subtitleDelayRef = useRef(0);
+  const subtitleDelayRef = useRef(defaultSubtitleDelay);
   const lastSavedRef = useRef(0);
   const subtitleInfoRef = useRef<Array<{ label: string; lang: string; url: string }>>([]);
   const subtitleElementsRef = useRef(new Map<number, { element: HTMLTrackElement; objectUrl: string }>());
@@ -104,7 +106,7 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
   const [audioTrack, setAudioTrack] = useState(-1);
   const [subtitles, setSubtitles] = useState<TrackOption[]>([]);
   const [subtitle_, setSubtitle] = useState(-1);
-  const [subtitleDelay, setSubtitleDelay] = useState(0);
+  const [subtitleDelay, setSubtitleDelay] = useState(defaultSubtitleDelay);
   const [qualities, setQualities] = useState<TrackOption[]>([]);
   const [quality, setQuality] = useState(-1);
   const [autoLevelLabel, setAutoLevelLabel] = useState("");
@@ -129,10 +131,7 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
       if (!info) return;
       try {
         const source = new URL(info.url, window.location.href);
-        source.search = "";
-        const response = await fetch(source, { credentials: "same-origin" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const text = await response.text();
+        const text = await loadSubtitleSource(source.href);
         if (request !== subtitleRequestRef.current || !videoRef.current) return;
         const objectUrl = URL.createObjectURL(new Blob([text], { type: "text/vtt" }));
         const element = document.createElement("track");
@@ -140,7 +139,21 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
         element.label = info.label;
         element.srclang = info.lang || "es";
         element.src = objectUrl;
-        element.addEventListener("load", () => shiftSubtitleCues([element.track], subtitleDelayRef.current, originalCueTimesRef.current));
+        element.addEventListener("load", () => {
+          const cues = element.track.cues;
+          if (cues) {
+            for (let index = 0; index < cues.length; index += 1) {
+              const cue = cues[index];
+              if (cue instanceof VTTCue && cue.line === "auto") {
+                // Deja espacio para los controles, también en pantalla completa.
+                cue.snapToLines = false;
+                cue.line = 84;
+                cue.lineAlign = "end";
+              }
+            }
+          }
+          shiftSubtitleCues([element.track], subtitleDelayRef.current, originalCueTimesRef.current);
+        });
         videoRef.current.appendChild(element);
         entry = { element, objectUrl };
         subtitleElementsRef.current.set(value, entry);
