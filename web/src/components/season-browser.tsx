@@ -7,23 +7,27 @@ import { Icon } from "@/components/icons";
 import { IntentLink } from "@/components/intent-link";
 import { tmdbImage } from "@/components/media-catalog";
 import { isFinished, type LocalProgress, progressRatio, readLocalProgress } from "@/lib/media/local-progress";
+import { loadMediaProgress } from "@/lib/media/progress-sync";
 
 export type EpisodeView = { id: string; number: number; overview: string | null; packageId: string | null; runtime: number | null; stillPath: string | null; title: string };
 export type SeasonView = { episodes: EpisodeView[]; id: string; number: number; overview: string | null; title: string };
 
-function useProgressMap(seasons: SeasonView[]) {
+function useProgressMap(seasons: SeasonView[], userId?: string) {
   const [progress, setProgress] = useState<Map<string, LocalProgress>>(new Map());
   useEffect(() => {
     const next = new Map<string, LocalProgress>();
     for (const season of seasons) for (const episode of season.episodes) {
       if (!episode.packageId) continue;
-      const value = readLocalProgress(episode.packageId);
+      const value = readLocalProgress(episode.packageId, userId);
       if (value) next.set(episode.packageId, value);
     }
     // Lectura única de localStorage tras montar: evita desajustes de hidratación.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setProgress(next);
-  }, [seasons]);
+    let disposed = false;
+    if (userId) void loadMediaProgress(seasons.flatMap((season) => season.episodes.flatMap((episode) => episode.packageId ? [episode.packageId] : [])), userId).then((result) => { if (!disposed) setProgress(result); });
+    return () => { disposed = true; };
+  }, [seasons, userId]);
   return progress;
 }
 
@@ -32,8 +36,8 @@ function episodeCode(season: SeasonView, episode: EpisodeView) {
 }
 
 /** Botón principal: continúa el último episodio empezado o el siguiente pendiente. */
-export function SeriesPlayButton({ seasons }: { seasons: SeasonView[] }) {
-  const progress = useProgressMap(seasons);
+export function SeriesPlayButton({ seasons, userId }: { seasons: SeasonView[]; userId?: string }) {
+  const progress = useProgressMap(seasons, userId);
   const target = useMemo(() => {
     const playable = seasons.flatMap((season) => season.episodes.filter((episode) => episode.packageId).map((episode) => ({ episode, season })));
     if (!playable.length) return null;
@@ -58,9 +62,9 @@ export function SeriesPlayButton({ seasons }: { seasons: SeasonView[] }) {
   );
 }
 
-export function SeasonBrowser({ seasons }: { seasons: SeasonView[] }) {
+export function SeasonBrowser({ seasons, userId }: { seasons: SeasonView[]; userId?: string }) {
   const [activeId, setActiveId] = useState(seasons[0]?.id);
-  const progress = useProgressMap(seasons);
+  const progress = useProgressMap(seasons, userId);
   const season = seasons.find((item) => item.id === activeId) ?? seasons[0];
   if (!season) return null;
 

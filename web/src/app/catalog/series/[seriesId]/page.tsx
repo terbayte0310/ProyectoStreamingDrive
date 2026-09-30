@@ -17,7 +17,7 @@ const metadataColumns = "series_id, season_id, episode_id, localized_title, over
 export default async function SeriesDetailPage({ params }: { params: Promise<{ seriesId: string }> }) {
   const { seriesId } = await params;
   const supabase = await createSupabaseServerClient();
-  const [, seriesResult, seriesMetadataResult, seasonsResult] = await Promise.all([
+  const [access, seriesResult, seriesMetadataResult, seasonsResult] = await Promise.all([
     requireAuthorizedAccess(),
     supabase.from("series").select("id, admin_title").eq("id", seriesId).eq("status", "published").maybeSingle(),
     supabase.from("media_tmdb_metadata").select(metadataColumns).eq("series_id", seriesId).maybeSingle(),
@@ -89,7 +89,7 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
               </div>
               <p className="detail-overview">{metadata?.overview ?? "Sin sinopsis disponible."}</p>
               <div className="detail-actions" id="series-actions">
-                <SeriesPlayButton seasons={seasonViews} />
+                <SeriesPlayButton seasons={seasonViews} userId={access.user.id} />
                 {metadata?.tmdb_url ? <a className="btn btn-glass btn-lg" href={metadata.tmdb_url} rel="noreferrer" target="_blank">Ficha en TMDB</a> : null}
               </div>
             </div>
@@ -98,7 +98,7 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ s
 
         <div className="container">
           {partialError ? <div className="notice notice-warn" style={{ marginBottom: 20 }}><span className="notice-icon"><Icon name="warning" /></span><div>Algunos datos de temporadas no se pudieron cargar. Lo disponible se muestra abajo.</div></div> : null}
-          {seasonViews.length ? <SeasonBrowser seasons={seasonViews} /> : (
+          {seasonViews.length ? <SeasonBrowser seasons={seasonViews} userId={access.user.id} /> : (
             <div className="empty-state"><span aria-hidden="true" className="empty-orb" /><h2 className="title-m">Todavía no hay temporadas publicadas</h2><p>Vuelve pronto: los episodios aparecerán aquí en cuanto estén listos.</p></div>
           )}
           <TmdbAttribution />

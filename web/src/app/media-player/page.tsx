@@ -18,7 +18,7 @@ export default async function MediaPlayerPage({ searchParams }: { searchParams: 
   const { package: packageId } = await searchParams;
   if (!packageId) notFound();
   const supabase = await createSupabaseServerClient();
-  const [, packageResult] = await Promise.all([
+  const [access, packageResult] = await Promise.all([
     requireAuthorizedAccess(),
     supabase.from("media_hls_packages").select("id, movie_id, episode_id").eq("id", packageId).maybeSingle<PackageRow>(),
   ]);
@@ -36,6 +36,7 @@ export default async function MediaPlayerPage({ searchParams }: { searchParams: 
       <main className="watch-page">
         <div className="watch-stage">
           <MediaHlsPlayer
+            userId={access.user.id}
             backHref={`/catalog/movies/${packageRow.movie_id}`}
             backdrop={tmdbImage(metadata?.backdrop_path ?? metadata?.poster_path, "w1280")}
             backdropMorphId={packageRow.movie_id}
@@ -81,6 +82,7 @@ export default async function MediaPlayerPage({ searchParams }: { searchParams: 
     <main className="watch-page">
       <div className="watch-stage">
         <MediaHlsPlayer
+          userId={access.user.id}
           backHref={`/catalog/series/${season.series_id}`}
           backdrop={tmdbImage(episodeMetadata?.backdrop_path ?? seriesMetadataResult.data?.backdrop_path ?? seriesMetadataResult.data?.poster_path, "w1280")}
           backdropMorphId={season.series_id}

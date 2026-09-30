@@ -12,6 +12,7 @@ import { readLocalProgress, resumePoint, writeLocalProgress } from "@/lib/media/
 import { deviceSnapshot, flushPlayerEvents, reportPlayerEvent, takeUncleanMarker, writePlayerMarker } from "@/lib/media/player-telemetry";
 import { shiftSubtitleCues } from "@/lib/media/subtitle-time";
 import { loadSubtitleSource } from "@/lib/media/subtitle-source";
+import { createProgressSync, loadMediaProgress } from "@/lib/media/progress-sync";
 
 const stageLabels = ["Verificando tu acceso", "Preparando el canal seguro", "Leyendo el índice del vídeo", "Cargando los primeros segundos"];
 const defaultSubtitleDelay = -1;
@@ -74,6 +75,7 @@ function languageLabel(name: string | undefined, lang: string | undefined, index
 }
 
 type Props = {
+  userId: string;
   backHref: string;
   backdrop?: string | null;
   backdropMorphId?: string;
@@ -85,7 +87,7 @@ type Props = {
   title?: string;
 };
 
-export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, module, next, packageId, subtitle, title = "Tu próxima historia" }: Props) {
+export function MediaHlsPlayer({ userId, backHref, backdrop, backdropMorphId, badges, module, next, packageId, subtitle, title = "Tu próxima historia" }: Props) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -197,16 +199,18 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
       setAudioTracks([]); setSubtitles([]); setQualities([]); setQuality(-1); setSubtitle(-1);
       originalCueTimesRef.current = new WeakMap();
       subtitleInfoRef.current = [];
-      setResumeAt(resumePoint(readLocalProgress(packageId)));
+      setResumeAt(resumePoint(readLocalProgress(packageId, userId)));
       try {
         // Token, worker y la librería HLS se preparan en paralelo. El token
         // también renueva la cookie HttpOnly que usa la ruta de respaldo.
-        const [tokenResponse, worker, HlsModule] = await Promise.all([
+        const [tokenResponse, worker, HlsModule, progress] = await Promise.all([
           fetch(`/api/drive-token?module=${module}`, { cache: "no-store", credentials: "same-origin" }),
           getDriveWorker().catch(() => null),
           import("hls.js"),
+          loadMediaProgress([packageId], userId, 2000),
         ]);
         if (disposed) return;
+        setResumeAt(resumePoint(progress.get(packageId) ?? readLocalProgress(packageId, userId)));
         if (tokenResponse.status === 401) {
           // Un 401 aislado no debe pedir contraseña: se reintenta una vez antes de rendirse.
           report("token-401", { retry: authRecoveries });
@@ -328,11 +332,11 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
     return () => {
       disposed = true;
       const video = mountedVideo;
-      if (video && Number.isFinite(video.duration) && video.currentTime > 5) writeLocalProgress(packageId, video.currentTime, video.duration);
+      if (video && Number.isFinite(video.duration) && video.currentTime > 5) writeLocalProgress(packageId, video.currentTime, video.duration, userId);
       hlsInstance?.destroy();
       if (hlsRef.current === hlsInstance) hlsRef.current = null;
     };
-  }, [attempt, forceProxy, module, packageId, report, selectSubtitle, silentReauth]);
+  }, [attempt, forceProxy, module, packageId, report, selectSubtitle, silentReauth, userId]);
 
   // Si el primer fragmento ya está listo antes que el evento de hls.js (Safari), se marca listo igual.
   useEffect(() => {
@@ -343,26 +347,37 @@ export function MediaHlsPlayer({ backHref, backdrop, backdropMorphId, badges, mo
     return () => video.removeEventListener("canplay", onReady);
   }, [playerKey]);
 
-  // Progreso local cada 5 s, al pausar y al abandonar la página.
+  // Caché local cada 5 s; nube cada 30 s y al pausar/salir, sin duplicados.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const save = () => { if (Number.isFinite(video.duration) && video.currentTime > 5) writeLocalProgress(packageId, video.currentTime, video.duration); };
+    const sync = createProgressSync(packageId, userId);
+    const save = () => { if (Number.isFinite(video.duration) && video.currentTime > 5) writeLocalProgress(packageId, video.currentTime, video.duration, userId); };
+    const flush = () => { save(); void sync(readLocalProgress(packageId, userId), true); };
+    const onHidden = () => { if (document.visibilityState === "hidden") flush(); };
+    const onOnline = () => { void sync(readLocalProgress(packageId, userId), true); };
+    const timer = window.setInterval(() => { void sync(readLocalProgress(packageId, userId)); }, 30_000);
     const onTime = () => {
       const now = Date.now();
       if (now - lastSavedRef.current > 5000) { lastSavedRef.current = now; save(); }
     };
     video.addEventListener("timeupdate", onTime);
-    video.addEventListener("pause", save);
-    video.addEventListener("ended", save);
-    window.addEventListener("pagehide", save);
+    video.addEventListener("pause", flush);
+    video.addEventListener("ended", flush);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onHidden);
     return () => {
+      flush();
+      window.clearInterval(timer);
       video.removeEventListener("timeupdate", onTime);
-      video.removeEventListener("pause", save);
-      video.removeEventListener("ended", save);
-      window.removeEventListener("pagehide", save);
+      video.removeEventListener("pause", flush);
+      video.removeEventListener("ended", flush);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onHidden);
     };
-  }, [packageId, playerKey]);
+  }, [packageId, playerKey, userId]);
 
   // Diagnóstico: latido por minuto, esperas del vídeo y detección de páginas que
   // el sistema mató sin avisar (típico de iPad con poca memoria).

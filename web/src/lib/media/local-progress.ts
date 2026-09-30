@@ -1,27 +1,37 @@
-// Progreso de Películas y Series por dispositivo. No existe tabla de progreso
-// para medios, así que se guarda en localStorage: gratis, instantáneo y sin
-// consultas extra. Los cursos siguen usando lesson_progress en Supabase.
+// Caché y respaldo por cuenta; Supabase sincroniza Películas y Series.
 
 export type LocalProgress = { at: number; d: number; t: number };
 
 const prefix = "nb-progress:";
 
-export function readLocalProgress(packageId: string): LocalProgress | null {
+export function readLocalProgress(packageId: string, userId?: string): LocalProgress | null {
   try {
-    const raw = localStorage.getItem(prefix + packageId);
+    const key = prefix + (userId ? `${userId}:` : "") + packageId;
+    let raw = localStorage.getItem(key);
+    // Adopt the former device-only checkpoint once, for the signed-in account.
+    if (!raw && userId) {
+      raw = localStorage.getItem(prefix + packageId);
+      if (raw) { localStorage.setItem(key, raw); localStorage.removeItem(prefix + packageId); }
+    }
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<LocalProgress>;
-    if (typeof value.t !== "number" || typeof value.d !== "number" || typeof value.at !== "number") return null;
+    if (typeof value.t !== "number" || typeof value.d !== "number" || typeof value.at !== "number"
+      || !Number.isFinite(value.t) || !Number.isFinite(value.d) || !Number.isFinite(value.at)
+      || value.t < 0 || value.d <= 0 || value.t > value.d || value.at <= 0) return null;
     return { at: value.at, d: value.d, t: value.t };
   } catch {
     return null;
   }
 }
 
-export function writeLocalProgress(packageId: string, seconds: number, duration: number) {
+export function cacheProgress(packageId: string, progress: LocalProgress, userId?: string) {
+  try { localStorage.setItem(prefix + (userId ? `${userId}:` : "") + packageId, JSON.stringify(progress)); } catch { /* Storage is optional. */ }
+}
+
+export function writeLocalProgress(packageId: string, seconds: number, duration: number, userId?: string) {
   if (!Number.isFinite(seconds) || !Number.isFinite(duration) || duration <= 0) return;
   try {
-    localStorage.setItem(prefix + packageId, JSON.stringify({ at: Date.now(), d: Math.round(duration), t: Math.round(seconds) }));
+    cacheProgress(packageId, { at: Date.now(), d: Math.round(duration), t: Math.min(Math.round(duration), Math.round(seconds)) }, userId);
   } catch {
     // Sin almacenamiento el reproductor funciona igual; solo no recuerda la posición.
   }
